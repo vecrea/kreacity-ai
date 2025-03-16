@@ -1,0 +1,252 @@
+{
+  "name": "Document Processing avec Mistral AI",
+  "nodes": [
+    {
+      "parameters": {
+        "filePath": "={{ $json.filePath }}"
+      },
+      "name": "Read Document",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract text from PDF or other document formats\nconst item = $input.item;\nlet text = \"\";\nlet mimeType = item.binary.data.mimeType;\nlet fileName = item.binary.data.fileName;\n\n// Process different file types\nif (mimeType.includes('pdf')) {\n  // For PDFs, use PDF extraction functionality\n  // This is a simplified example\n  const pdfText = $binary.extractText(item.binary.data.data);\n  text = pdfText;\n} else if (mimeType.includes('text')) {\n  // For text files, simply decode the binary data\n  const buffer = Buffer.from(item.binary.data.data, 'base64');\n  text = buffer.toString('utf-8');\n} else if (mimeType.includes('word') || mimeType.includes('office')) {\n  // For office documents, use appropriate extraction\n  // This is a simplified example\n  const docText = $binary.extractText(item.binary.data.data);\n  text = docText;\n}\n\n// Return the extracted text\nreturn {\n  fileName,\n  documentText: text,\n  documentTitle: fileName.split('.')[0],\n  metadata: {\n    source: fileName,\n    mimeType,\n    extractionDate: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{$credentials.mistralApiKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "mistral-embed"
+            },
+            {
+              "name": "input",
+              "value": "={{ $json.documentText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Generate Embeddings via Mistral",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mistralApiKey",
+          "name": "Mistral API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process the response from the Mistral embeddings API\nconst item = $input.item;\nconst previousItem = $input.item.$node[\"Extract Text\"].json;\nconst mistralResponse = item.json;\n\n// Extract the embedding vector\nconst embedding = mistralResponse.data[0].embedding;\n\n// Generate a unique ID\nconst documentId = `doc_${Date.now()}_${Math.floor(Math.random() * 1000)}`;\n\n// Prepare data for Qdrant\nreturn {\n  documentId,\n  title: previousItem.documentTitle,\n  text: previousItem.documentText,\n  embedding,\n  metadata: previousItem.metadata,\n  qdrantPoint: {\n    id: documentId,\n    vector: embedding,\n    payload: {\n      title: previousItem.documentTitle,\n      text_snippet: previousItem.documentText.substring(0, 1000),\n      source: previousItem.metadata.source,\n      extraction_date: previousItem.metadata.extractionDate\n    }\n  }\n};"
+      },
+      "name": "Process Embedding",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/points?wait=true",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "collection_name",
+              "value": "vectors"
+            },
+            {
+              "name": "points",
+              "value": "={{ [{ id: $json.documentId, vector: $json.embedding, payload: { title: $json.title, text_snippet: $json.text.substring(0, 1000), source: $json.metadata.source, extraction_date: $json.metadata.extractionDate } }] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Store in Qdrant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO documents (title, content, metadata, embedding_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        "additionalFields": {},
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ JSON.stringify($json.metadata) }}"
+            },
+            {
+              "name": "embedding_id",
+              "value": "={{ $json.documentId }}"
+            }
+          ]
+        }
+      },
+      "name": "Store in PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Final processing\nconst qdrantResponse = $input.item.$node[\"Store in Qdrant\"].json;\nconst pgResponse = $input.item.$node[\"Store in PostgreSQL\"].json;\n\nreturn {\n  status: \"success\",\n  message: \"Document processed and stored successfully\",\n  documentId: $input.item.json.documentId,\n  title: $input.item.json.title,\n  databaseId: pgResponse[0].id,\n  vectorDatabaseStatus: qdrantResponse.status || \"stored\",\n  processingDate: new Date().toISOString()\n};"
+      },
+      "name": "Final Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Read Document": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "Generate Embeddings via Mistral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embeddings via Mistral": {
+      "main": [
+        [
+          {
+            "node": "Process Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Embedding": {
+      "main": [
+        [
+          {
+            "node": "Store in Qdrant",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store in PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

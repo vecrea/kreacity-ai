@@ -2,7 +2,7 @@
 
 # Créer les répertoires nécessaires
 mkdir -p postgres-init
-mkdir -p embeddings-api
+mkdir -p qdrant-init
 
 # Créer le fichier d'initialisation pour PostgreSQL
 cat > postgres-init/init-documents-db.sql << 'EOF'
@@ -58,85 +58,6 @@ CREATE TABLE chunks (
 CREATE INDEX idx_chunks_content ON chunks USING GIN (to_tsvector('english', content));
 EOF
 
-# Créer un service d'embeddings simplifié (qui retourne des vecteurs aléatoires)
-cat > embeddings-api/app.py << 'EOF'
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-import numpy as np
-
-app = FastAPI(title="Embeddings API - Simulation")
-
-# Classes pour les requêtes et réponses
-class EmbeddingRequest(BaseModel):
-    inputs: List[str]
-    model: Optional[str] = None
-
-class EmbeddingResponse(BaseModel):
-    data: List[List[float]]
-    model: str
-    dimensions: int
-
-# Routes API
-@app.post("/embeddings")
-async def create_embeddings(request: EmbeddingRequest):
-    """
-    Génère des embeddings simulés (vecteurs aléatoires).
-    """
-    try:
-        # Dimension pour le modèle all-MiniLM-L6-v2
-        dim = 384
-        
-        # Générer des embeddings aléatoires pour chaque texte en entrée
-        embeddings = [list(np.random.rand(dim).astype(float)) for _ in request.inputs]
-        
-        return EmbeddingResponse(
-            data=embeddings,
-            model="random-embeddings-simulator",
-            dimensions=dim
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/")
-async def root():
-    """
-    Point de terminaison racine qui renvoie des informations sur l'API.
-    """
-    return {
-        "name": "Embeddings API Simulator",
-        "model": "random-embeddings-simulator",
-        "device": "simulation",
-        "endpoints": {
-            "/embeddings": "POST - Générer des embeddings simulés"
-        }
-    }
-EOF
-
-# Créer le fichier requirements.txt pour le service d'embeddings
-cat > embeddings-api/requirements.txt << 'EOF'
-fastapi
-uvicorn
-numpy
-pydantic
-EOF
-
-# Créer un Dockerfile pour le service d'embeddings
-cat > embeddings-api/Dockerfile << 'EOF'
-FROM python:3.10-slim
-
-WORKDIR /app
-
-COPY app.py /app/
-COPY requirements.txt /app/
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-EXPOSE 80
-
-CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
-EOF
-
 # Créer le docker-compose.yml
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
@@ -150,6 +71,7 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
+      # Variables pour permettre à n8n de communiquer avec les autres services
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -182,7 +104,7 @@ services:
         sleep 10 &&
         curl -X PUT 'http://localhost:6333/collections/vectors' -H 'Content-Type: application/json' -d '{
           \"vectors\": {
-            \"size\": 384,
+            \"size\": 1024,
             \"distance\": \"Cosine\"
           }
         }' &&
@@ -213,6 +135,7 @@ services:
       - DATABASE_PATH=/root/.flowise
       - APIKEY_PATH=/root/.flowise
       - SECRETKEY_PATH=/root/.flowise
+      # Variables pour permettre à Flowise de communiquer avec les autres services
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -222,15 +145,6 @@ services:
       - QDRANT_PORT=6333
     volumes:
       - flowise_data:/root/.flowise
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-  # Service d'embeddings simplifié (pas de modèle lourd, juste un service qui retourne des vecteurs aléatoires)
-  embeddings:
-    build: ./embeddings-api
-    ports:
-      - "8080:80"
     restart: unless-stopped
     networks:
       - kreacity-ai
@@ -246,6 +160,74 @@ networks:
     driver: bridge
 EOF
 
+# Créer un README pour les utilisateurs
+cat > README.md << 'EOF'
+# Kreacity AI
+
+Une stack d'IA locale combinant :
+
+- **n8n** (port 5678) : Automatisation de workflows
+- **Qdrant** (port 6333) : Base de données vectorielle
+- **PostgreSQL** (port 5432) : Base de données SQL
+- **Flowise** (port 3000) : Construction de flux IA sans code
+
+Cette stack est configurée pour utiliser Mistral AI comme service d'embeddings externe.
+
+## Installation rapide
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/vecrea/kreacity-ai.git
+cd kreacity-ai
+
+# Lancer l'installation
+chmod +x setup.sh
+./setup.sh
+```
+
+## Préparer un environnement propre
+
+Pour nettoyer votre environnement Docker avant l'installation :
+
+```bash
+docker stop $(docker ps -a -q) || true \
+&& docker rm $(docker ps -a -q) || true \
+&& docker volume prune -f \
+&& docker network prune -f \
+&& docker image prune -a -f
+```
+
+⚠️ **Attention** : Cette commande supprime tous les conteneurs, volumes et réseaux Docker.
+
+## Services disponibles
+
+Une fois installé, les services sont disponibles aux adresses suivantes :
+
+- **n8n** : http://localhost:5678
+- **Flowise** : http://localhost:3000
+- **Qdrant API** : http://localhost:6333
+- **PostgreSQL** : localhost:5432
+
+## Configuration de Mistral AI dans Flowise
+
+Pour configurer Mistral AI comme service d'embeddings dans Flowise :
+
+1. Obtenez une clé API de Mistral AI en vous inscrivant sur leur site.
+2. Dans Flowise, lorsque vous configurez un workflow, ajoutez un nœud "MistralAI Embeddings".
+3. Configurez-le avec votre clé API.
+4. La collection Qdrant est configurée pour utiliser des vecteurs de dimension 1024 (compatibles avec Mistral).
+
+## Exemples d'utilisation
+
+### Workflow RAG typique dans Flowise
+1. Importer des documents via "Document Loader"
+2. Découper les documents en chunks avec "Text Splitter"
+3. Générer des embeddings avec "MistralAI Embeddings"
+4. Stocker dans "Qdrant Vector Store"
+5. Configurer un nœud "Conversational Retrieval Chain"
+6. Connecter à un modèle de langage (LLM) de votre choix
+EOF
+
 # Démarrer les services
 echo "Création du réseau kreacity-ai si nécessaire..."
 docker network create kreacity-ai 2>/dev/null || true
@@ -258,5 +240,8 @@ echo "URLs des services :"
 echo "- n8n: http://localhost:5678"
 echo "- Flowise: http://localhost:3000"
 echo "- Qdrant API: http://localhost:6333"
-echo "- Embeddings API: http://localhost:8080"
 echo "- PostgreSQL: localhost:5432 (utiliser un client PostgreSQL comme pgAdmin)"
+echo ""
+echo "Pour utiliser Mistral AI comme service d'embeddings, vous devrez :"
+echo "1. Obtenir une clé API Mistral AI"
+echo "2. Configurer un nœud MistralAI Embeddings dans Flowise avec cette clé"

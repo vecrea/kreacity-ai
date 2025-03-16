@@ -1,0 +1,153 @@
+{
+  "name": "RAG avec Mistral AI",
+  "description": "Exemple de Retrieval Augmented Generation utilisant Mistral AI pour les embeddings",
+  "nodes": [
+    {
+      "id": "input-node",
+      "type": "chatInput",
+      "data": {
+        "question": "",
+        "chatHistory": []
+      },
+      "position": {
+        "x": 100,
+        "y": 300
+      }
+    },
+    {
+      "id": "mistral-embedding-model",
+      "type": "mistralEmbedding",
+      "data": {
+        "apiKey": "YOUR_MISTRAL_API_KEY",
+        "embeddingModel": "mistral-embed"
+      },
+      "position": {
+        "x": 400,
+        "y": 150
+      }
+    },
+    {
+      "id": "qdrant-vectorstore",
+      "type": "qdrantVectorStore",
+      "data": {
+        "url": "http://qdrant:6333",
+        "collectionName": "vectors",
+        "embeddingField": "text_snippet",
+        "metadataField": "metadata",
+        "topK": 5
+      },
+      "position": {
+        "x": 400,
+        "y": 300
+      }
+    },
+    {
+      "id": "mistral-llm-model",
+      "type": "mistralAI",
+      "data": {
+        "apiKey": "YOUR_MISTRAL_API_KEY",
+        "model": "mistral-medium",
+        "temperature": 0.7,
+        "maxTokens": 1000
+      },
+      "position": {
+        "x": 700,
+        "y": 150
+      }
+    },
+    {
+      "id": "retrieval",
+      "type": "retrieval",
+      "data": {
+        "query": "{{$input.question}}",
+        "topK": 3,
+        "filter": {}
+      },
+      "position": {
+        "x": 700,
+        "y": 300
+      }
+    },
+    {
+      "id": "prompt-template",
+      "type": "promptTemplate",
+      "data": {
+        "template": "Tu es un assistant IA qui répond à des questions basées sur le contexte fourni.\n\nContexte:\n{{$retrieval.documents}}\n\nQuestion: {{$input.question}}\n\nRéponds à la question uniquement en utilisant le contexte fourni. Si tu ne peux pas trouver la réponse dans le contexte, dis 'Je n'ai pas assez d'informations pour répondre à cette question.'"
+      },
+      "position": {
+        "x": 1000,
+        "y": 300
+      }
+    },
+    {
+      "id": "llm-chain",
+      "type": "llmChain",
+      "data": {
+        "chatHistory": "{{$input.chatHistory}}"
+      },
+      "position": {
+        "x": 1300,
+        "y": 300
+      }
+    },
+    {
+      "id": "output-node",
+      "type": "chatOutput",
+      "data": {},
+      "position": {
+        "x": 1600,
+        "y": 300
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "input-node",
+      "sourceHandle": "question",
+      "target": "retrieval",
+      "targetHandle": "query"
+    },
+    {
+      "source": "input-node",
+      "sourceHandle": "chatHistory",
+      "target": "llm-chain",
+      "targetHandle": "chatHistory"
+    },
+    {
+      "source": "mistral-embedding-model",
+      "sourceHandle": "embedding",
+      "target": "qdrant-vectorstore",
+      "targetHandle": "embeddingModel"
+    },
+    {
+      "source": "qdrant-vectorstore",
+      "sourceHandle": "vectorStore",
+      "target": "retrieval",
+      "targetHandle": "vectorStore"
+    },
+    {
+      "source": "retrieval",
+      "sourceHandle": "documents",
+      "target": "prompt-template",
+      "targetHandle": "documents"
+    },
+    {
+      "source": "prompt-template",
+      "sourceHandle": "prompt",
+      "target": "llm-chain",
+      "targetHandle": "prompt"
+    },
+    {
+      "source": "mistral-llm-model",
+      "sourceHandle": "llm",
+      "target": "llm-chain",
+      "targetHandle": "llm"
+    },
+    {
+      "source": "llm-chain",
+      "sourceHandle": "result",
+      "target": "output-node",
+      "targetHandle": "answer"
+    }
+  ]
+}
