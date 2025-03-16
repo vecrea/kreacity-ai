@@ -32,22 +32,14 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-      - ./qdrant-init:/qdrant-init
     restart: unless-stopped
     networks:
       - kreacity-ai
-    command: >
-      sh -c "
-        qdrant --config-path /qdrant/config/config.yaml &
-        sleep 10 &&
-        curl -X PUT 'http://localhost:6333/collections/vectors' -H 'Content-Type: application/json' -d '{
-          \"vectors\": {
-            \"size\": 1024,
-            \"distance\": \"Cosine\"
-          }
-        }' &&
-        tail -f /dev/null
-      "
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   db:
     image: postgres:15

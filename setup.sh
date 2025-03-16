@@ -2,7 +2,6 @@
 
 # Créer les répertoires nécessaires
 mkdir -p postgres-init
-mkdir -p qdrant-init
 
 # Créer le fichier d'initialisation pour PostgreSQL
 cat > postgres-init/init-documents-db.sql << 'EOF'
@@ -94,22 +93,14 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-      - ./qdrant-init:/qdrant-init
     restart: unless-stopped
     networks:
       - kreacity-ai
-    command: >
-      sh -c "
-        qdrant --config-path /qdrant/config/config.yaml &
-        sleep 10 &&
-        curl -X PUT 'http://localhost:6333/collections/vectors' -H 'Content-Type: application/json' -d '{
-          \"vectors\": {
-            \"size\": 1024,
-            \"distance\": \"Cosine\"
-          }
-        }' &&
-        tail -f /dev/null
-      "
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   db:
     image: postgres:15
@@ -160,6 +151,28 @@ networks:
     driver: bridge
 EOF
 
+# Créer le script d'initialisation pour Qdrant
+cat > init-qdrant.sh << 'EOF'
+#!/bin/bash
+
+# Attendre que Qdrant démarre
+echo "Attente du démarrage de Qdrant..."
+sleep 10
+
+# Créer la collection vectors
+echo "Création de la collection vectors dans Qdrant..."
+curl -X PUT 'http://localhost:6333/collections/vectors' -H 'Content-Type: application/json' -d '{
+  "vectors": {
+    "size": 1024,
+    "distance": "Cosine"
+  }
+}'
+
+echo "Initialisation de Qdrant terminée"
+EOF
+
+chmod +x init-qdrant.sh
+
 # Créer un README pour les utilisateurs
 cat > README.md << 'EOF'
 # Kreacity AI
@@ -183,6 +196,9 @@ cd kreacity-ai
 # Lancer l'installation
 chmod +x setup.sh
 ./setup.sh
+
+# Initialiser Qdrant
+./init-qdrant.sh
 ```
 
 ## Préparer un environnement propre
@@ -241,6 +257,8 @@ echo "- n8n: http://localhost:5678"
 echo "- Flowise: http://localhost:3000"
 echo "- Qdrant API: http://localhost:6333"
 echo "- PostgreSQL: localhost:5432 (utiliser un client PostgreSQL comme pgAdmin)"
+echo ""
+echo "IMPORTANT : Exécutez maintenant './init-qdrant.sh' pour initialiser la collection Qdrant"
 echo ""
 echo "Pour utiliser Mistral AI comme service d'embeddings, vous devrez :"
 echo "1. Obtenir une clé API Mistral AI"
