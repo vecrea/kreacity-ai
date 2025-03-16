@@ -14,6 +14,7 @@ Une stack d'IA complète, auto-hébergée et entièrement locale, combinant :
 # Cloner le dépôt
 git clone https://github.com/votre-utilisateur/kreacity-ai-stack.git
 cd kreacity-ai-stack
+chmod +x setup.sh update-dimension.sh
 
 # Lancer l'installation
 ./setup.sh
@@ -76,6 +77,24 @@ Vous trouverez dans le dossier `examples/n8n` des workflows pour :
 Dans le dossier `examples/flowise` :
 - Configuration pour utiliser le service d'embeddings local
 - Workflows RAG (Retrieval Augmented Generation)
+
+## Nettoyage total, si tu veux tout éliminer pour recommencer
+⚠️ Attention : Cette commande arrête et supprime tous les conteneurs, volumes et réseaux Docker. N'utilisez cette commande que si vous êtes sûr de ne pas avoir de données importantes dans vos conteneurs Docker existants.
+
+```bash
+docker stop $(docker ps -a -q) || true \
+&& docker rm $(docker ps -a -q) || true \
+&& docker volume prune -f \
+&& docker network prune -f \
+&& docker image prune -a -f \
+&& echo "Vérification des ports utilisés:" \
+&& echo "Port 5678 (n8n):" && lsof -i :5678 || echo "Libre" \
+&& echo "Port 6333 (Qdrant):" && lsof -i :6333 || echo "Libre" \
+&& echo "Port 5432 (PostgreSQL):" && lsof -i :5432 || echo "Libre" \
+&& echo "Port 3000 (Flowise):" && lsof -i :3000 || echo "Libre" \
+&& echo "Port 8080 (Embeddings):" && lsof -i :8080 || echo "Libre" \
+&& echo "Docker est maintenant nettoyé et prêt pour un test."
+```
 
 ## 🤝 Contribution
 
