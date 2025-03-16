@@ -66,18 +66,17 @@ EOF
 mkdir -p embeddings-api
 cat > embeddings-api/app.py << 'EOF'
 import os
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import torch
-from transformers import AutoTokenizer, AutoModel
+from sentence_transformers import SentenceTransformer
 import numpy as np
 
 app = FastAPI(title="Embeddings API")
 
 # Configurer le modèle
-MODEL_ID = os.environ.get("MODEL_ID", "Xenova/all-MiniLM-L6-v2")
+MODEL_ID = os.environ.get("MODEL_ID", "all-MiniLM-L6-v2")
 USE_MPS = os.environ.get("USE_MPS", "0") == "1"
 USE_CUDA = os.environ.get("USE_CUDA", "0") == "1"
 
@@ -88,31 +87,15 @@ print(f"USE_MPS: {USE_MPS}, USE_CUDA: {USE_CUDA}")
 if USE_CUDA and torch.cuda.is_available():
     device = torch.device("cuda")
     print("Utilisation de CUDA")
-elif USE_MPS and torch.backends.mps.is_available():
+elif USE_MPS and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
     device = torch.device("mps")
     print("Utilisation de MPS (Apple Silicon)")
 else:
     device = torch.device("cpu")
     print("Utilisation du CPU")
 
-# Charger le modèle
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-model = AutoModel.from_pretrained(MODEL_ID).to(device)
-
-# Fonction pour calculer les embeddings
-def get_embeddings(texts):
-    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    
-    # Récupérer l'embedding de [CLS] ou faire une moyenne des tokens
-    embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
-    
-    # Normaliser les embeddings
-    norm = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    normalized_embeddings = embeddings / norm
-    
-    return normalized_embeddings.tolist()
+# Charger le modèle SentenceTransformer (plus simple que le code original)
+model = SentenceTransformer(MODEL_ID, device=str(device))
 
 # Classes pour les requêtes et réponses
 class EmbeddingRequest(BaseModel):
@@ -129,14 +112,18 @@ class EmbeddingResponse(BaseModel):
 async def create_embeddings(request: EmbeddingRequest):
     """
     Génère des embeddings pour les textes fournis.
-    Compatible avec d'autres API d'embeddings.
+    Compatible avec les API d'embeddings standards.
     """
     try:
-        embeddings = get_embeddings(request.inputs)
-        dimensions = len(embeddings[0]) if embeddings else 0
+        # Utiliser SentenceTransformer directement
+        embeddings = model.encode(request.inputs, normalize_embeddings=True)
+        
+        # Convertir les embeddings en liste
+        embeddings_list = embeddings.tolist()
+        dimensions = len(embeddings_list[0]) if embeddings_list else 0
         
         return EmbeddingResponse(
-            data=embeddings,
+            data=embeddings_list,
             model=MODEL_ID,
             dimensions=dimensions
         )
@@ -160,6 +147,16 @@ async def root():
 # Démarrer le serveur avec: python -m uvicorn app:app --host 0.0.0.0 --port 80
 EOF
 
+# Créer le fichier requirements.txt pour le service d'embeddings
+cat > embeddings-api/requirements.txt << 'EOF'
+fastapi==0.104.1
+uvicorn==0.24.0
+torch==2.1.0
+sentence-transformers==2.2.2
+numpy==1.26.0
+pydantic==2.4.2
+EOF
+
 # Créer un Dockerfile personnalisé pour le service d'embeddings
 cat > embeddings-api/Dockerfile << 'EOF'
 FROM python:3.10-slim
@@ -171,8 +168,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY app.py /app/
+COPY requirements.txt /app/
 
-RUN pip install --no-cache-dir fastapi uvicorn torch transformers numpy pydantic
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 80
 
@@ -248,7 +246,7 @@ services:
       - kreacity-ai
 
   supabase:
-    image: supabase/supabase-postgres:15.1.0
+    image: supabase/postgres:15.1.0
     depends_on:
       - db
     restart: unless-stopped
