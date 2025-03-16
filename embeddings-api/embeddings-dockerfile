@@ -2,15 +2,8 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY app.py /app/
 COPY requirements.txt /app/
-
-# Ajouter platform=linux/amd64 pour s'assurer que les packages sont compatibles
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir -r requirements.txt
 

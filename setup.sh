@@ -1,12 +1,8 @@
 #!/bin/bash
 
-# Configuration - MODIFIEZ CETTE VARIABLE SELON VOTRE MATÉRIEL
-# USE_GPU=false pour CPU uniquement (Mac M1/M2, machines sans GPU)
-# USE_GPU=true pour machines avec GPU NVIDIA
-USE_GPU=false
-
 # Créer les répertoires nécessaires
-mkdir -p postgres-init qdrant-init
+mkdir -p postgres-init
+mkdir -p embeddings-api
 
 # Créer le fichier d'initialisation pour PostgreSQL
 cat > postgres-init/init-documents-db.sql << 'EOF'
@@ -35,12 +31,12 @@ CREATE INDEX idx_documents_metadata ON documents USING GIN (metadata);
 
 -- Fonction pour mettre à jour le timestamp updated_at
 CREATE OR REPLACE FUNCTION update_modified_column()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Trigger pour mettre à jour updated_at automatiquement
 CREATE TRIGGER set_timestamp
@@ -62,40 +58,14 @@ CREATE TABLE chunks (
 CREATE INDEX idx_chunks_content ON chunks USING GIN (to_tsvector('english', content));
 EOF
 
-# Créer le fichier API wrapper pour les embeddings
-mkdir -p embeddings-api
+# Créer un service d'embeddings simplifié (qui retourne des vecteurs aléatoires)
 cat > embeddings-api/app.py << 'EOF'
-import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-import torch
-from sentence_transformers import SentenceTransformer
 import numpy as np
 
-app = FastAPI(title="Embeddings API")
-
-# Configurer le modèle
-MODEL_ID = os.environ.get("MODEL_ID", "all-MiniLM-L6-v2")
-USE_MPS = os.environ.get("USE_MPS", "0") == "1"
-USE_CUDA = os.environ.get("USE_CUDA", "0") == "1"
-
-print(f"Chargement du modèle {MODEL_ID}")
-print(f"USE_MPS: {USE_MPS}, USE_CUDA: {USE_CUDA}")
-
-# Déterminer le device à utiliser
-if USE_CUDA and torch.cuda.is_available():
-    device = torch.device("cuda")
-    print("Utilisation de CUDA")
-elif USE_MPS and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    device = torch.device("mps")
-    print("Utilisation de MPS (Apple Silicon)")
-else:
-    device = torch.device("cpu")
-    print("Utilisation du CPU")
-
-# Charger le modèle SentenceTransformer (plus simple que le code original)
-model = SentenceTransformer(MODEL_ID, device=str(device))
+app = FastAPI(title="Embeddings API - Simulation")
 
 # Classes pour les requêtes et réponses
 class EmbeddingRequest(BaseModel):
@@ -111,21 +81,19 @@ class EmbeddingResponse(BaseModel):
 @app.post("/embeddings")
 async def create_embeddings(request: EmbeddingRequest):
     """
-    Génère des embeddings pour les textes fournis.
-    Compatible avec les API d'embeddings standards.
+    Génère des embeddings simulés (vecteurs aléatoires).
     """
     try:
-        # Utiliser SentenceTransformer directement
-        embeddings = model.encode(request.inputs, normalize_embeddings=True)
+        # Dimension pour le modèle all-MiniLM-L6-v2
+        dim = 384
         
-        # Convertir les embeddings en liste
-        embeddings_list = embeddings.tolist()
-        dimensions = len(embeddings_list[0]) if embeddings_list else 0
+        # Générer des embeddings aléatoires pour chaque texte en entrée
+        embeddings = [list(np.random.rand(dim).astype(float)) for _ in request.inputs]
         
         return EmbeddingResponse(
-            data=embeddings_list,
-            model=MODEL_ID,
-            dimensions=dimensions
+            data=embeddings,
+            model="random-embeddings-simulator",
+            dimensions=dim
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -136,36 +104,28 @@ async def root():
     Point de terminaison racine qui renvoie des informations sur l'API.
     """
     return {
-        "name": "Embeddings API",
-        "model": MODEL_ID,
-        "device": str(device),
+        "name": "Embeddings API Simulator",
+        "model": "random-embeddings-simulator",
+        "device": "simulation",
         "endpoints": {
-            "/embeddings": "POST - Générer des embeddings pour les textes"
+            "/embeddings": "POST - Générer des embeddings simulés"
         }
     }
-
-# Démarrer le serveur avec: python -m uvicorn app:app --host 0.0.0.0 --port 80
 EOF
 
 # Créer le fichier requirements.txt pour le service d'embeddings
 cat > embeddings-api/requirements.txt << 'EOF'
-fastapi==0.104.1
-uvicorn==0.24.0
-torch==2.1.0
-sentence-transformers==2.2.2
-numpy==1.26.0
-pydantic==2.4.2
+fastapi
+uvicorn
+numpy
+pydantic
 EOF
 
-# Créer un Dockerfile personnalisé pour le service d'embeddings
+# Créer un Dockerfile pour le service d'embeddings
 cat > embeddings-api/Dockerfile << 'EOF'
 FROM python:3.10-slim
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY app.py /app/
 COPY requirements.txt /app/
@@ -177,7 +137,7 @@ EXPOSE 80
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
 EOF
 
-# Créer les fichiers docker-compose mis à jour
+# Créer le docker-compose.yml
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
 
@@ -190,7 +150,6 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
-      # Variables pour permettre à n8n de communiquer avec les autres services
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -245,20 +204,6 @@ services:
     networks:
       - kreacity-ai
 
-  supabase:
-    image: supabase/postgres:15.1.0
-    depends_on:
-      - db
-    restart: unless-stopped
-    environment:
-      POSTGRES_PASSWORD: postgres
-      PGPORT: 5432
-      PGDATABASE: postgres
-      PGHOST: db
-      PGUSER: postgres
-    networks:
-      - kreacity-ai
-
   flowise:
     image: flowiseai/flowise:latest
     ports:
@@ -268,7 +213,6 @@ services:
       - DATABASE_PATH=/root/.flowise
       - APIKEY_PATH=/root/.flowise
       - SECRETKEY_PATH=/root/.flowise
-      # Variables pour permettre à Flowise de communiquer avec les autres services
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -282,8 +226,14 @@ services:
     networks:
       - kreacity-ai
 
-  # Le service d'embeddings est géré par des fichiers docker-compose séparés
-  # Voir docker-compose.cpu.yml, docker-compose.gpu.yml, et docker-compose.apple-silicon.yml
+  # Service d'embeddings simplifié (pas de modèle lourd, juste un service qui retourne des vecteurs aléatoires)
+  embeddings:
+    build: ./embeddings-api
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - kreacity-ai
 
 volumes:
   n8n_data:
@@ -296,272 +246,12 @@ networks:
     driver: bridge
 EOF
 
-# Créer les configurations spécifiques pour les différentes architectures
-cat > docker-compose.apple-silicon.yml << 'EOF'
-version: '3.8'
+# Démarrer les services
+echo "Création du réseau kreacity-ai si nécessaire..."
+docker network create kreacity-ai 2>/dev/null || true
 
-services:
-  # Version personnalisée pour Apple Silicon
-  sentence-transformers:
-    build: 
-      context: ./embeddings-api
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
-    environment:
-      - MODEL_ID=Xenova/all-MiniLM-L6-v2
-      - USE_MPS=1
-    volumes:
-      - embeddings_cache:/app/data
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-volumes:
-  embeddings_cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF
-
-cat > docker-compose.cpu.yml << 'EOF'
-version: '3.8'
-
-services:
-  # Version CPU pour toutes architectures
-  sentence-transformers:
-    build: 
-      context: ./embeddings-api
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
-    environment:
-      - MODEL_ID=Xenova/all-MiniLM-L6-v2
-      - USE_CUDA=0
-    volumes:
-      - embeddings_cache:/app/data
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-volumes:
-  embeddings_cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF
-
-cat > docker-compose.gpu.yml << 'EOF'
-version: '3.8'
-
-services:
-  # Version GPU NVIDIA
-  sentence-transformers:
-    build: 
-      context: ./embeddings-api
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
-    environment:
-      - MODEL_ID=Xenova/all-MiniLM-L6-v2
-      - USE_CUDA=1
-    volumes:
-      - embeddings_cache:/app/data
-    restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-              count: 1
-              driver: nvidia
-    networks:
-      - kreacity-ai
-
-volumes:
-  embeddings_cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF#!/bin/bash
-
-# Configuration - MODIFIEZ CETTE VARIABLE SELON VOTRE MATÉRIEL
-# USE_GPU=false pour CPU uniquement (Mac M1/M2, machines sans GPU)
-# USE_GPU=true pour machines avec GPU NVIDIA
-USE_GPU=false
-
-# Créer les répertoires nécessaires
-mkdir -p postgres-init qdrant-init
-
-# Créer le fichier d'initialisation pour PostgreSQL
-cat > postgres-init/init-documents-db.sql << 'EOF'
--- Création de la base de données documents
-CREATE DATABASE documents;
-
--- Connexion à la base de données documents
-\c documents;
-
--- Création d'une table pour stocker les documents
-CREATE TABLE documents (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    metadata JSONB,
-    embedding_id TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Création d'un index pour la recherche plein texte
-CREATE INDEX idx_documents_content ON documents USING GIN (to_tsvector('english', content));
-
--- Création d'un index pour la recherche dans les métadonnées
-CREATE INDEX idx_documents_metadata ON documents USING GIN (metadata);
-
--- Fonction pour mettre à jour le timestamp updated_at
-CREATE OR REPLACE FUNCTION update_modified_column()
-RETURNS TRIGGER AS $
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$ LANGUAGE plpgsql;
-
--- Trigger pour mettre à jour updated_at automatiquement
-CREATE TRIGGER set_timestamp
-BEFORE UPDATE ON documents
-FOR EACH ROW
-EXECUTE FUNCTION update_modified_column();
-
--- Création d'une table pour les chunks de documents
-CREATE TABLE chunks (
-    id SERIAL PRIMARY KEY,
-    document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    metadata JSONB,
-    embedding_id TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Création d'un index pour la recherche plein texte sur les chunks
-CREATE INDEX idx_chunks_content ON chunks USING GIN (to_tsvector('english', content));
-EOF
-
-# Créer les fichiers de configuration
-echo "Création des fichiers de configuration..."
-
-# Version GPU (NVIDIA)
-cat > docker-compose.gpu.yml << 'EOF'
-version: '3.8'
-
-services:
-  # Service pour les embeddings locaux (version GPU)
-  sentence-transformers:
-    image: ghcr.io/huggingface/text-embeddings-inference:latest
-    command: --model-id BAAI/bge-small-en-v1.5
-    ports:
-      - "8080:80"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-              count: 1
-              driver: nvidia
-    volumes:
-      - hf-cache:/data
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-volumes:
-  hf-cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF
-
-# Version CPU (pour Mac M1/M2 ou machines sans GPU)
-cat > docker-compose.cpu.yml << 'EOF'
-version: '3.8'
-
-services:
-  # Service pour les embeddings locaux (version CPU)
-  sentence-transformers:
-    image: ghcr.io/huggingface/text-embeddings-inference:latest
-    command: --model-id BAAI/bge-small-en-v1.5
-    environment:
-      - USE_CUDA=0
-    ports:
-      - "8080:80"
-    volumes:
-      - hf-cache:/data
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-volumes:
-  hf-cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF
-
-# Version Apple Silicon (Mac M1/M2 avec MPS)
-cat > docker-compose.apple-silicon.yml << 'EOF'
-version: '3.8'
-
-services:
-  # Version spécifique pour Apple Silicon avec MPS
-  sentence-transformers:
-    image: ghcr.io/huggingface/text-embeddings-inference:latest
-    command: --model-id BAAI/bge-small-en-v1.5
-    environment:
-      - HF_ACCELERATOR=mps
-    ports:
-      - "8080:80"
-    volumes:
-      - hf-cache:/data
-    restart: unless-stopped
-    networks:
-      - kreacity-ai
-
-volumes:
-  hf-cache:
-
-networks:
-  kreacity-ai:
-    external: true
-EOF
-
-# Démarrer les services principaux
-echo "Démarrage des services de base (n8n, Qdrant, PostgreSQL, Flowise)..."
-docker network create kreacity-ai || true
-docker-compose up -d n8n qdrant db supabase flowise
-
-# Attendre que les services soient prêts
-echo "Attente du démarrage des services (10 secondes)..."
-sleep 10
-
-# Démarrer le service d'embeddings avec la configuration appropriée
-if [ "$USE_GPU" = true ]; then
-    echo "Démarrage du service d'embeddings avec GPU NVIDIA..."
-    docker-compose -f docker-compose.gpu.yml up -d --build sentence-transformers
-else
-    # Détecter si nous sommes sur un Mac M1/M2
-    if [[ $(uname -m) == 'arm64' && $(uname -s) == 'Darwin' ]]; then
-        echo "Mac Apple Silicon (M1/M2) détecté, utilisation de MPS..."
-        docker-compose -f docker-compose.apple-silicon.yml up -d --build sentence-transformers
-    else
-        echo "Démarrage du service d'embeddings en mode CPU uniquement..."
-        docker-compose -f docker-compose.cpu.yml up -d --build sentence-transformers
-    fi
-fi
+echo "Démarrage des services..."
+docker-compose up -d
 
 echo "Tous les services sont démarrés !"
 echo "URLs des services :"
@@ -569,4 +259,4 @@ echo "- n8n: http://localhost:5678"
 echo "- Flowise: http://localhost:3000"
 echo "- Qdrant API: http://localhost:6333"
 echo "- Embeddings API: http://localhost:8080"
-echo "- PostgreSQL/Supabase: localhost:5432 (utiliser un client PostgreSQL)"
+echo "- PostgreSQL: localhost:5432 (utiliser un client PostgreSQL comme pgAdmin)"
