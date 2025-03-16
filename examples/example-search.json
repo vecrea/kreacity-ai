@@ -1,0 +1,248 @@
+{
+  "name": "Semantic Search Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "search",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "1e83b5dc-4526-4326-a317-37bbcd789a5f"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate and prepare search query\nconst item = $input.item;\nlet query = item.json.query || \"\";\n\nif (!query || query.trim() === \"\") {\n  return {\n    error: true,\n    message: \"Search query is required\",\n    status: 400\n  };\n}\n\n// Limit max tokens for the query\nquery = query.trim().substring(0, 1000);\n\n// Optional parameters\nconst limit = item.json.limit || 5;\nconst threshold = item.json.threshold || 0.7;\n\nreturn {\n  query,\n  limit: Math.min(Math.max(1, limit), 20), // Between 1 and 20\n  threshold: Math.min(Math.max(0, threshold), 1), // Between 0 and 1\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Prepare Query",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://sentence-transformers:80/embeddings",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+            "node": "Search Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Format Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Results": {
+      "main": [
+        [
+          {
+            "node": "Get Full Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Full Documents": {
+      "main": [
+        [
+          {
+            "node": "Enhance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhance Results": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ [$json.query] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Generate Embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/points/search",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "collection_name",
+              "value": "vectors"
+            },
+            {
+              "name": "vector",
+              "value": "={{ $json.data[0] }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $node[\"Prepare Query\"].json.limit }}"
+            },
+            {
+              "name": "score_threshold",
+              "value": "={{ $node[\"Prepare Query\"].json.threshold }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Search Qdrant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process and format search results\nconst item = $input.item;\nconst searchResults = item.json.result || [];\nconst query = $input.item.$node[\"Prepare Query\"].json.query;\n\n// Format results\nconst formattedResults = searchResults.map((result, index) => {\n  return {\n    rank: index + 1,\n    id: result.id,\n    score: result.score.toFixed(4),\n    title: result.payload.title || \"Untitled\",\n    snippet: result.payload.text_snippet || \"\",\n    source: result.payload.source || \"Unknown\",\n    date: result.payload.extraction_date\n  };\n});\n\n// Prepare response\nreturn {\n  query,\n  resultsCount: formattedResults.length,\n  results: formattedResults,\n  searchTime: new Date().toISOString()\n};"
+      },
+      "name": "Format Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM documents WHERE embedding_id IN ({{ $json.results.map(r => \"'\" + r.id + \"'\").join(\",\") }}) ORDER BY ARRAY_POSITION(ARRAY[{{ $json.results.map(r => \"'\" + r.id + \"'\").join(\",\") }}]::text[], embedding_id)",
+        "additionalFields": {}
+      },
+      "name": "Get Full Documents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Combine vector search results with full document content\nconst searchResults = $input.item.$node[\"Format Results\"].json;\nconst documents = $input.item.$node[\"Get Full Documents\"].json;\n\n// Create a map of document IDs to their full content\nconst docMap = {};\nfor (const doc of documents) {\n  docMap[doc.embedding_id] = doc;\n}\n\n// Enhance the results with full content if available\nconst enhancedResults = searchResults.results.map(result => {\n  const fullDoc = docMap[result.id];\n  return {\n    ...result,\n    fullContent: fullDoc ? fullDoc.content : null,\n    databaseId: fullDoc ? fullDoc.id : null,\n    metadata: fullDoc ? JSON.parse(fullDoc.metadata) : null\n  };\n});\n\n// Final response\nreturn {\n  query: searchResults.query,\n  resultsCount: enhancedResults.length,\n  results: enhancedResults,\n  searchTime: searchResults.searchTime\n};"
+      },
+      "name": "Enhance Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseData": "={{ $json }}",
+        "options": {}
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Query": {
+      "main": [
+        [
+          {
+            "node": "Generate Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embeddings": {
+      "main": [
+        [
+          {

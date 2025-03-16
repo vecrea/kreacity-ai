@@ -1,0 +1,154 @@
+{
+  "name": "RAG with Local Embeddings",
+  "description": "Example of Retrieval Augmented Generation using local embeddings and Qdrant",
+  "nodes": [
+    {
+      "id": "input-node",
+      "type": "chatInput",
+      "data": {
+        "question": "",
+        "chatHistory": []
+      },
+      "position": {
+        "x": 100,
+        "y": 300
+      }
+    },
+    {
+      "id": "embedding-model",
+      "type": "customembedding",
+      "data": {
+        "baseURL": "http://sentence-transformers:80",
+        "embedPath": "/embeddings",
+        "dimensions": 384
+      },
+      "position": {
+        "x": 400,
+        "y": 150
+      }
+    },
+    {
+      "id": "qdrant-vectorstore",
+      "type": "qdrantVectorStore",
+      "data": {
+        "url": "http://qdrant:6333",
+        "collectionName": "vectors",
+        "embeddingField": "text_snippet",
+        "metadataField": "metadata",
+        "topK": 5
+      },
+      "position": {
+        "x": 400,
+        "y": 300
+      }
+    },
+    {
+      "id": "llm-model",
+      "type": "localAI",
+      "data": {
+        "baseURL": "http://ollama:11434",
+        "model": "llama3",
+        "temperature": 0.7,
+        "maxTokens": 1000
+      },
+      "position": {
+        "x": 700,
+        "y": 150
+      }
+    },
+    {
+      "id": "retrieval",
+      "type": "retrieval",
+      "data": {
+        "query": "{{$input.question}}",
+        "topK": 3,
+        "filter": {}
+      },
+      "position": {
+        "x": 700,
+        "y": 300
+      }
+    },
+    {
+      "id": "prompt-template",
+      "type": "promptTemplate",
+      "data": {
+        "template": "You are a helpful assistant that answers questions based on the provided context.\n\nContext:\n{{$retrieval.documents}}\n\nQuestion: {{$input.question}}\n\nAnswer the question based only on the provided context. If you cannot find the answer in the context, say 'I don't have enough information to answer this question.'"
+      },
+      "position": {
+        "x": 1000,
+        "y": 300
+      }
+    },
+    {
+      "id": "llm-chain",
+      "type": "llmChain",
+      "data": {
+        "chatHistory": "{{$input.chatHistory}}"
+      },
+      "position": {
+        "x": 1300,
+        "y": 300
+      }
+    },
+    {
+      "id": "output-node",
+      "type": "chatOutput",
+      "data": {},
+      "position": {
+        "x": 1600,
+        "y": 300
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "input-node",
+      "sourceHandle": "question",
+      "target": "retrieval",
+      "targetHandle": "query"
+    },
+    {
+      "source": "input-node",
+      "sourceHandle": "chatHistory",
+      "target": "llm-chain",
+      "targetHandle": "chatHistory"
+    },
+    {
+      "source": "embedding-model",
+      "sourceHandle": "embedding",
+      "target": "qdrant-vectorstore",
+      "targetHandle": "embeddingModel"
+    },
+    {
+      "source": "qdrant-vectorstore",
+      "sourceHandle": "vectorStore",
+      "target": "retrieval",
+      "targetHandle": "vectorStore"
+    },
+    {
+      "source": "retrieval",
+      "sourceHandle": "documents",
+      "target": "prompt-template",
+      "targetHandle": "documents"
+    },
+    {
+      "source": "prompt-template",
+      "sourceHandle": "prompt",
+      "target": "llm-chain",
+      "targetHandle": "prompt"
+    },
+    {
+      "source": "llm-model",
+      "sourceHandle": "llm",
+      "target": "llm-chain",
+      "targetHandle": "llm"
+    },
+    {
+      "source": "llm-chain",
+      "sourceHandle": "result",
+      "target": "output-node",
+      "targetHandle": "answer"
+    }
+  ]
+}
