@@ -292,7 +292,103 @@ volumes:
   qdrant_data:
   postgres_data:
   flowise_data:
-  #!/bin/bash
+
+networks:
+  kreacity-ai:
+    driver: bridge
+EOF
+
+# Créer les configurations spécifiques pour les différentes architectures
+cat > docker-compose.apple-silicon.yml << 'EOF'
+version: '3.8'
+
+services:
+  # Version personnalisée pour Apple Silicon
+  sentence-transformers:
+    build: 
+      context: ./embeddings-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - USE_MPS=1
+    volumes:
+      - embeddings_cache:/app/data
+    restart: unless-stopped
+    networks:
+      - kreacity-ai
+
+volumes:
+  embeddings_cache:
+
+networks:
+  kreacity-ai:
+    external: true
+EOF
+
+cat > docker-compose.cpu.yml << 'EOF'
+version: '3.8'
+
+services:
+  # Version CPU pour toutes architectures
+  sentence-transformers:
+    build: 
+      context: ./embeddings-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - USE_CUDA=0
+    volumes:
+      - embeddings_cache:/app/data
+    restart: unless-stopped
+    networks:
+      - kreacity-ai
+
+volumes:
+  embeddings_cache:
+
+networks:
+  kreacity-ai:
+    external: true
+EOF
+
+cat > docker-compose.gpu.yml << 'EOF'
+version: '3.8'
+
+services:
+  # Version GPU NVIDIA
+  sentence-transformers:
+    build: 
+      context: ./embeddings-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - USE_CUDA=1
+    volumes:
+      - embeddings_cache:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              count: 1
+              driver: nvidia
+    networks:
+      - kreacity-ai
+
+volumes:
+  embeddings_cache:
+
+networks:
+  kreacity-ai:
+    external: true
+EOF#!/bin/bash
 
 # Configuration - MODIFIEZ CETTE VARIABLE SELON VOTRE MATÉRIEL
 # USE_GPU=false pour CPU uniquement (Mac M1/M2, machines sans GPU)
@@ -447,6 +543,7 @@ EOF
 
 # Démarrer les services principaux
 echo "Démarrage des services de base (n8n, Qdrant, PostgreSQL, Flowise)..."
+docker network create kreacity-ai || true
 docker-compose up -d n8n qdrant db supabase flowise
 
 # Attendre que les services soient prêts
@@ -456,15 +553,15 @@ sleep 10
 # Démarrer le service d'embeddings avec la configuration appropriée
 if [ "$USE_GPU" = true ]; then
     echo "Démarrage du service d'embeddings avec GPU NVIDIA..."
-    docker-compose -f docker-compose.gpu.yml up -d sentence-transformers
+    docker-compose -f docker-compose.gpu.yml up -d --build sentence-transformers
 else
     # Détecter si nous sommes sur un Mac M1/M2
     if [[ $(uname -m) == 'arm64' && $(uname -s) == 'Darwin' ]]; then
         echo "Mac Apple Silicon (M1/M2) détecté, utilisation de MPS..."
-        docker-compose -f docker-compose.apple-silicon.yml up -d sentence-transformers
+        docker-compose -f docker-compose.apple-silicon.yml up -d --build sentence-transformers
     else
         echo "Démarrage du service d'embeddings en mode CPU uniquement..."
-        docker-compose -f docker-compose.cpu.yml up -d sentence-transformers
+        docker-compose -f docker-compose.cpu.yml up -d --build sentence-transformers
     fi
 fi
 

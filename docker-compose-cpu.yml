@@ -1,25 +1,24 @@
 version: '3.8'
 
 services:
-  # Service pour les embeddings locaux (version CPU)
+  # Version CPU pour toutes architectures
   sentence-transformers:
-    # Image compatible avec diverses architectures incluant ARM64
-    image: xenova/transformers:latest
+    build: 
+      context: ./embeddings-api
+      dockerfile: Dockerfile
     ports:
       - "8080:80"
     environment:
-      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - MODEL_ID=all-MiniLM-L6-v2
       - USE_CUDA=0
     volumes:
-      - hf-cache:/app/data
+      - embeddings_cache:/app/data
     restart: unless-stopped
     networks:
       - kreacity-ai
-    # Expose une API REST compatible avec les embeddings
-    command: python -m uvicorn app:app --host 0.0.0.0 --port 80
 
 volumes:
-  hf-cache:
+  embeddings_cache:
 
 networks:
   kreacity-ai:

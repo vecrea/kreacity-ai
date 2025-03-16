@@ -1,17 +1,18 @@
 version: '3.8'
 
 services:
-  # Service pour les embeddings locaux (version GPU NVIDIA)
+  # Version GPU NVIDIA
   sentence-transformers:
-    # Image compatible avec CUDA
-    image: xenova/transformers:latest
+    build: 
+      context: ./embeddings-api
+      dockerfile: Dockerfile
     ports:
       - "8080:80"
     environment:
-      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - MODEL_ID=all-MiniLM-L6-v2
       - USE_CUDA=1
     volumes:
-      - hf-cache:/app/data
+      - embeddings_cache:/app/data
     restart: unless-stopped
     deploy:
       resources:
@@ -22,11 +23,9 @@ services:
               driver: nvidia
     networks:
       - kreacity-ai
-    # Expose une API REST compatible avec les embeddings
-    command: python -m uvicorn app:app --host 0.0.0.0 --port 80
 
 volumes:
-  hf-cache:
+  embeddings_cache:
 
 networks:
   kreacity-ai:
