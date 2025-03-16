@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Version spécifique pour Apple Silicon avec MPS (Metal Performance Shaders)
+  sentence-transformers:
+    # Image compatible avec ARM64
+    image: xenova/transformers:latest
+    ports:
+      - "8080:80"
+    environment:
+      - MODEL_ID=Xenova/all-MiniLM-L6-v2
+      - USE_MPS=1
+    volumes:
+      - hf-cache:/app/data
+    restart: unless-stopped
+    networks:
+      - kreacity-ai
+    # Expose une API REST compatible avec les embeddings
+    command: python -m uvicorn app:app --host 0.0.0.0 --port 80
+
+volumes:
+  hf-cache:
+
+networks:
+  kreacity-ai:
+    external: true

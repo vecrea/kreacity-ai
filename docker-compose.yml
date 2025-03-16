@@ -1,0 +1,100 @@
+  # Le service d'embeddings est géré par des fichiers docker-compose séparés
+  # Voir docker-compose.cpu.yml, docker-compose.gpu.yml, et docker-compose.apple-silicon.ymlversion: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      # Variables pour permettre à n8n de communiquer avec les autres services
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - FLOWISE_HOST=flowise
+      - FLOWISE_PORT=3000
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+    networks:
+      - kreacity-ai
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  supabase:
+    image: supabase/supabase-postgres:15.1.0
+    depends_on:
+      - db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGHOST: db
+      PGUSER: postgres
+    networks:
+      - app-network
+
+  flowise:
+    image: flowiseai/flowise:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/root/.flowise
+      - APIKEY_PATH=/root/.flowise
+      - SECRETKEY_PATH=/root/.flowise
+      # Variables pour permettre à Flowise de communiquer avec les autres services
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    volumes:
+      - flowise_data:/root/.flowise
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  n8n_data:
+  qdrant_data:
+  postgres_data:
+  flowise_data:
+  hf-cache:
+
+networks:
+  kreacity-ai:
+    driver: bridge
