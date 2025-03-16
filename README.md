@@ -1,63 +1,86 @@
-# Exemples d'utilisation de Kreacity AI Stack
+# Kreacity AI Stack
 
-Ce répertoire contient des exemples prêts à l'emploi pour exploiter la puissance de Kreacity AI Stack.
+Une stack d'IA complète, auto-hébergée et entièrement locale, combinant :
 
-## Exemples n8n
+- **n8n** (port 5678) : Automatisation de workflows
+- **Qdrant** (port 6333) : Base de données vectorielle
+- **Supabase/PostgreSQL** (port 5432) : Base de données SQL
+- **Flowise** (port 3000) : Construction de flux IA sans code
+- **Embeddings locaux** (port 8080) : Service d'embeddings indépendant
 
-### Traitement de documents (`document-processing.json`)
+## 🚀 Installation rapide
 
-Ce workflow permet de :
-1. Lire un document (PDF, texte, etc.)
-2. Extraire son contenu textuel
-3. Générer des embeddings avec le service local
-4. Stocker le document dans PostgreSQL
-5. Stocker les embeddings dans Qdrant
+```bash
+# Cloner le dépôt
+git clone https://github.com/votre-utilisateur/kreacity-ai-stack.git
+cd kreacity-ai-stack
 
-**Comment l'utiliser :**
-1. Importez le workflow dans n8n
-2. Configurez les informations d'authentification pour PostgreSQL
-3. Testez avec un document PDF ou texte
+# Lancer l'installation
+./setup.sh
+```
 
-### Recherche sémantique (`semantic-search.json`)
+Le script détecte automatiquement votre matériel et configure le système en conséquence.
 
-Ce workflow expose un webhook qui permet de :
-1. Recevoir une requête de recherche
-2. Transformer cette requête en embeddings
-3. Rechercher les documents similaires dans Qdrant
-4. Récupérer les documents complets depuis PostgreSQL
-5. Renvoyer les résultats les plus pertinents
+## 💻 Configuration matérielle
 
-**Comment l'utiliser :**
-1. Importez le workflow dans n8n
-2. Activez le webhook
-3. Faites une requête POST avec un payload JSON comme ceci :
-   ```json
-   {
-     "query": "Votre question ou recherche ici",
-     "limit": 5,
-     "threshold": 0.7
-   }
-   ```
+Le système s'adapte automatiquement à votre matériel :
 
-## Exemples Flowise
+- **Mac M1/M2 (Apple Silicon)** : Utilise MPS pour l'accélération
+- **PC avec GPU NVIDIA** : Utilise CUDA pour l'accélération (activez avec `USE_GPU=true` dans setup.sh)
+- **PC sans GPU** : Utilise le CPU uniquement (configuration par défaut)
 
-### Workflow RAG (`rag-workflow.json`)
+## 🔗 Accès aux services
 
-Ce workflow illustre comment implémenter un système de Retrieval Augmented Generation (RAG) avec :
-1. Un service d'embeddings local
-2. Qdrant comme base de données vectorielle
-3. Un modèle de langage (Ollama est utilisé dans l'exemple)
+Une fois installé, les services sont disponibles aux adresses suivantes :
 
-**Comment l'utiliser :**
-1. Importez le workflow dans Flowise
-2. Assurez-vous que la collection "vectors" dans Qdrant contient déjà des documents (utilisez le workflow n8n de traitement de documents pour les ajouter)
-3. Remplacez la configuration du modèle de langage selon vos besoins
-4. Posez des questions sur vos documents !
+- **n8n** : http://localhost:5678
+- **Flowise** : http://localhost:3000
+- **Qdrant API** : http://localhost:6333
+- **Embeddings API** : http://localhost:8080
+- **PostgreSQL** : localhost:5432 (utilisez un client PostgreSQL comme pgAdmin)
 
-## Personnalisation des exemples
+## 📋 Fonctionnalités
 
-Ces exemples sont conçus pour être faciles à personnaliser :
+- **100% local** : Aucune dépendance à des services cloud
+- **Communication inter-services** : Tous les services peuvent communiquer entre eux
+- **Préconfiguration** : Base de données "documents" et collection "vectors" créées automatiquement
+- **Multi-plateforme** : Fonctionne sur Linux, macOS et Windows (avec Docker)
 
-- **Changement de modèle d'embeddings** : Si vous changez de modèle avec le script `update-dimension.sh`, assurez-vous de mettre à jour la dimension dans les configurations (384 par défaut pour bge-small)
-- **Adaptation des chaînes de traitement** : Les workflows peuvent être adaptés pour des cas d'usage spécifiques
-- **Intégration avec d'autres services** : Vous pouvez facilement connecter ces workflows à d'autres outils de votre stack
+## 🛠️ Personnalisation
+
+### Changer le modèle d'embeddings
+
+Pour utiliser un modèle d'embeddings différent :
+
+```bash
+./update-dimension.sh sentence-transformers/all-MiniLM-L6-v2 384
+```
+
+Modèles recommandés :
+- `BAAI/bge-small-en-v1.5` : 384 dimensions (défaut)
+- `sentence-transformers/all-MiniLM-L6-v2` : 384 dimensions
+- `intfloat/e5-large-v2` : 1024 dimensions
+- `intfloat/multilingual-e5-large` : 1024 dimensions
+
+## 📚 Exemples d'utilisation
+
+### n8n + Embeddings + Qdrant
+
+Vous trouverez dans le dossier `examples/n8n` des workflows pour :
+- Traiter des documents avec extraction de texte
+- Générer des embeddings et les stocker dans Qdrant
+- Effectuer des recherches sémantiques
+
+### Flowise + Embeddings locaux
+
+Dans le dossier `examples/flowise` :
+- Configuration pour utiliser le service d'embeddings local
+- Workflows RAG (Retrieval Augmented Generation)
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
+
+## 📄 Licence
+
+Ce projet est sous licence MIT.
