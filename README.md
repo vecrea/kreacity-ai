@@ -12,8 +12,8 @@ Une stack d'IA complète, auto-hébergée et entièrement locale, combinant :
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/votre-utilisateur/kreacity-ai-stack.git
-cd kreacity-ai-stack
+git clone https://github.com/vecrea/kreacity-ai.git
+cd kreacity-ai
 chmod +x setup.sh update-dimension.sh
 
 # Lancer l'installation
