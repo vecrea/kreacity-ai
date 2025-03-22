@@ -35,7 +35,7 @@ docker stop $(docker ps -a -q) || true \
 && docker image prune -a -f
 ```
 
-⚠️ **Attention** : Cette commande supprime tous les conteneurs, volumes et réseaux Docker.
+⚠️ **Attention** : Cette commande supprime tous les conteneurs, volumes et réseaux Docker, même ceux qui n'ont rien à voir avec projet.
 
 ## Services disponibles
 
