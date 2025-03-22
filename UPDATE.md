@@ -1,4 +1,4 @@
-# Instructions de mise à jour vers la version 1.2.0
+# Instructions de mise à jour vers la version 1.2.1
 
 Date de publication: 2025-03-22
 
@@ -7,11 +7,6 @@ Date de publication: 2025-03-22
 1. Récupérez les derniers changements:
    ```bash
    git fetch origin
-   git checkout v1.2.0
+   git checkout v1.2.1
    ```
 
-## Principales nouveautés
-
-- Améliorations diverses et corrections de bugs
-
-Pour une liste complète des changements, consultez le [CHANGELOG.md](./CHANGELOG.md).
