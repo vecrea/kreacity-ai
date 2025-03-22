@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.0] - 2025-03-22
+
+### 📚 Documentation
+
+- préparation pour la version 1.1.3
+- préparation pour la version 1.1.2
+- préparation pour la version 1.1.1
+
+
+
 ## [1.1.3] - 2025-03-22
 
 ### 📚 Documentation
