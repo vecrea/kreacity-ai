@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kreacity AI - Dashboard</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        .notion-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            border: none;
+        }
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background-color: #111827;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .logo {
+            font-weight: bold;
+            font-size: 1.5rem;
+            margin-right: 30px;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+        }
+        .header a {
+            color: white;
+            margin-right: 20px;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+        }
+        .header a:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .header a i {
+            margin-right: 6px;
+        }
+        .content {
+            margin-top: 60px;
+            height: calc(100% - 60px);
+        }
+        .version {
+            margin-left: auto;
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+</head>
+<body>
+    <div class="header">
+        <div class="logo">Kreacity AI</div>
+        <div class="nav-links">
+            <a href="http://localhost:5678" target="_blank"><i class="fas fa-project-diagram"></i> n8n</a>
+            <a href="http://localhost:3000" target="_blank"><i class="fas fa-brain"></i> Flowise</a>
+            <a href="http://localhost:6333/dashboard" target="_blank"><i class="fas fa-database"></i> Qdrant</a>
+            <a href="https://console.mistral.ai" target="_blank"><i class="fas fa-rocket"></i> Mistral AI</a>
+        </div>
+        <div class="version">v1.0.0</div>
+    </div>
+    <div class="content">
+<iframe src="https://teamkreacity.notion.site/ebd/1b907b114ff380a38917c6d3dafe4c54" width="100%" height="600" frameborder="0" allowfullscreen />
+      
+    </div>
+</body>
+</html>

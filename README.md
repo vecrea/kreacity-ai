@@ -1,12 +1,12 @@
 # Kreacity AI
 
-Une stack d'IA complète, auto-hébergée et locale, combinant :
+Une stack d'IA locale combinant :
 
 - **n8n** (port 5678) : Automatisation de workflows
 - **Qdrant** (port 6333) : Base de données vectorielle
 - **PostgreSQL** (port 5432) : Base de données SQL
 - **Flowise** (port 3000) : Construction de flux IA sans code
-- **Embeddings API** (port 8080) : Service d'embeddings simplifié
+
 
 ## Installation rapide
 
@@ -18,6 +18,9 @@ cd kreacity-ai
 # Lancer l'installation
 chmod +x setup.sh
 ./setup.sh
+
+# Initialiser Qdrant
+./init-qdrant.sh
 ```
 
 ## Préparer un environnement propre
@@ -41,13 +44,23 @@ Une fois installé, les services sont disponibles aux adresses suivantes :
 - **n8n** : http://localhost:5678
 - **Flowise** : http://localhost:3000
 - **Qdrant API** : http://localhost:6333
-- **Embeddings API** : http://localhost:8080
 - **PostgreSQL** : localhost:5432
 
-## À propos du service d'embeddings
+## Configuration de Mistral AI dans Flowise
 
-Cette version utilise un service d'embeddings simplifié qui génère des vecteurs aléatoires de dimension 384. Il est compatible avec les API d'embeddings standards mais ne fournit pas de véritables embeddings sémantiques.
+Pour configurer Mistral AI comme service d'embeddings dans Flowise :
 
-Pour intégrer un vrai modèle d'embeddings, vous pouvez :
-1. Utiliser une API externe comme OpenAI, Cohere ou Hugging Face
-2. Intégrer un modèle léger compatible avec votre architecture
+1. Obtenez une clé API de Mistral AI en vous inscrivant sur leur site.
+2. Dans Flowise, lorsque vous configurez un workflow, ajoutez un nœud "MistralAI Embeddings".
+3. Configurez-le avec votre clé API.
+4. La collection Qdrant est configurée pour utiliser des vecteurs de dimension 1024 (compatibles avec Mistral).
+
+## Exemples d'utilisation
+
+### Workflow RAG typique dans Flowise
+1. Importer des documents via "Document Loader"
+2. Découper les documents en chunks avec "Text Splitter"
+3. Générer des embeddings avec "MistralAI Embeddings"
+4. Stocker dans "Qdrant Vector Store"
+5. Configurer un nœud "Conversational Retrieval Chain"
+6. Connecter à un modèle de langage (LLM) de votre choix
