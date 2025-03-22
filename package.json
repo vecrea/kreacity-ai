@@ -1,6 +1,6 @@
 {
   "name": "kreacity-ai",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Une stack d'IA locale combinant :",
   "main": "version.js",
   "directories": {
