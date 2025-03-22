@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0] - 2025-03-22
+
+### 📚 Documentation
+
+- mise à jour pour la version 1.2.0
+- préparation pour la version 1.2.0
+- préparation pour la version 1.1.3
+- préparation pour la version 1.1.2
+- préparation pour la version 1.1.1
+- préparation pour la version 1.0.3
+- préparation pour la version 1.0.2
+
+### 🔄 Autres changements
+
+- chore: version 1.2.1
+- chore: version 1.1.0
+- 0.0.6 Qdrant en install séparée
+
 ## [1.2.0] - 2025-03-22
 
 ### 📚 Documentation
