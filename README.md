@@ -64,3 +64,4 @@ Pour configurer Mistral AI comme service d'embeddings dans Flowise :
 4. Stocker dans "Qdrant Vector Store"
 5. Configurer un nœud "Conversational Retrieval Chain"
 6. Connecter à un modèle de langage (LLM) de votre choix
+# Ajout pour forcer un changement - Sat Mar 22 19:32:49 CET 2025
