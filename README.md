@@ -49,11 +49,11 @@ Une fois installé, les services sont disponibles aux adresses suivantes :
 ## Configuration de Mistral AI dans Flowise
 
 Pour configurer Mistral AI comme service d'embeddings dans Flowise :
-
 1. Obtenez une clé API de Mistral AI en vous inscrivant sur leur site.
 2. Dans Flowise, lorsque vous configurez un workflow, ajoutez un nœud "MistralAI Embeddings".
 3. Configurez-le avec votre clé API.
 4. La collection Qdrant est configurée pour utiliser des vecteurs de dimension 1024 (compatibles avec Mistral).
+(cela dit, ça ne fonctionne pas bien, donc j'ai repassé le tout en openAi avec des vecteurs de dimensions 3072)
 
 ## Exemples d'utilisation
 
