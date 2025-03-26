@@ -362,4 +362,63 @@ CREATE TABLE IF NOT EXISTS documents (
 
 PSQL_EOF
 
-echo "
+echo "PostgreSQL tables created successfully!"
+
+
+echo "Downloading embedding model for Ollama..."
+# Attendre que le service Ollama soit prêt
+echo "Waiting for Ollama to be ready..."
+until $(curl --output /dev/null --silent --head --fail http://localhost:11434/); do
+  printf '.'
+  sleep 5
+done
+
+# Télécharger le modèle d'embedding
+echo "Downloading mxbai-embed-large model..."
+curl -X POST http://localhost:11434/api/pull -d '{"name": "mxbai-embed-large"}' -s > /dev/null
+echo "Downloading nomic-embed-text model as backup..."
+curl -X POST http://localhost:11434/api/pull -d '{"name": "nomic-embed-text"}' -s > /dev/null
+
+echo "Embedding models downloaded successfully!"
+
+# Vérifier le statut du webhook-forwarder
+echo "Checking webhook-forwarder (ngrok) status..."
+ATTEMPTS=0
+MAX_ATTEMPTS=10
+until [ $ATTEMPTS -ge $MAX_ATTEMPTS ]
+do
+  if curl --output /dev/null --silent --fail http://localhost:4040/api/tunnels; then
+    echo "Webhook-forwarder (ngrok) is ready!"
+    # Récupérer et afficher l'URL publique
+    NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"[^"]*' | grep -o 'http[^"]*' | head -1)
+    echo ""
+    echo "Votre URL ngrok est: $NGROK_URL"
+    echo "Cette URL peut être utilisée pour recevoir des webhooks externes."
+    break
+  fi
+  
+  ATTEMPTS=$((ATTEMPTS+1))
+  echo "Waiting for webhook-forwarder to start... (attempt $ATTEMPTS/$MAX_ATTEMPTS)"
+  sleep 5
+done
+
+if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+  echo "Webhook-forwarder did not start properly. Please check your ngrok token configuration."
+fi
+
+echo "Kreacity AI setup complete!"
+echo ""
+echo "Services available:"
+echo "- Web UI: http://localhost:8080"
+echo "- FloWise: http://localhost:3000"
+echo "- n8n: http://localhost:5678"
+echo "- Qdrant: http://localhost:6333"
+echo "- Ollama: http://localhost:11434"
+echo "- PostgreSQL: localhost:5555 (user: postgres, password: postgres)"
+echo "- Ngrok Dashboard: http://localhost:4040"
+echo ""
+echo "Pour configurer d'autres intégrations externes:"
+echo "1. Modifiez le fichier .env avec vos informations d'authentification"
+echo "2. Placez google-credentials.json dans le répertoire racine si nécessaire"
+echo ""
+echo "Pour plus d'informations, consultez la documentation ou visitez l'interface web http://localhost:8080"
