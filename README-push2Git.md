@@ -1,5 +1,3 @@
-Voici la documentation mise à jour pour `push2Git.js` qui inclut des informations sur les problèmes d'authentification GitHub et les améliorations apportées à la gestion des commits et tags :
-
 # Gestionnaire de Versioning et Push Git pour Kreacity-AI
 
 ## Description
@@ -92,7 +90,7 @@ Avant d'utiliser les fonctionnalités de push, configurez correctement votre acc
 - `--no-check` - Ignore la vérification des dépendances
 - `--commit-all` - Commit automatiquement toutes les modifications en attente
 - `--push` - Pousse automatiquement les changements vers le dépôt distant
-- `--force` - Force l'exécution malgré les erreurs ou avertissements
+- `--force` - Force l'exécution malgré les erreurs ou avertissements (peut aussi recréer des tags existants)
 
 ### Exemples
 
@@ -108,6 +106,9 @@ Avant d'utiliser les fonctionnalités de push, configurez correctement votre acc
 
 # Incrémenter le patch et commiter tous les changements
 ./push2Git.js patch --commit-all
+
+# Forcer la création d'une version même si un tag existe déjà
+./push2Git.js 1.5.0 --force
 ```
 
 ## Fichiers générés
@@ -136,8 +137,9 @@ Pour tirer pleinement parti de la génération automatique de changelog, utilise
 Le script inclut plusieurs mécanismes pour éviter les erreurs Git courantes :
 
 - Détection intelligente des changements non commités
-- Vérification pour éviter de créer des commits vides
-- Détection des tags existants pour éviter les conflits
+- Analyse précise des fichiers stagés pour éviter les commits vides
+- Vérification complète des tags existants avec possibilité de recréation via `--force`
+- Distinction entre les modifications générales et les modifications spécifiques à la version
 - Gestion élégante des erreurs d'authentification
 
 ## Résolution des problèmes courants
@@ -155,8 +157,13 @@ Si vous voyez une erreur comme `remote: Permission to user/repo.git denied` :
 ### Script de migration manquant
 Si des changements majeurs sont détectés mais qu'aucun script de migration n'est trouvé, créez manuellement le script dans `scripts/migrations/`.
 
-### Erreur "Empty commit"
-Cette erreur est maintenant automatiquement évitée par le script qui vérifie s'il y a des changements à commiter avant d'essayer de créer un commit.
+### Problèmes avec les tags Git
+- Le script détecte automatiquement si un tag existe déjà pour la version
+- Pour recréer un tag existant, utilisez l'option `--force`
+- Pour pousser manuellement un tag, utilisez `git push origin v{version}`
+
+### Commit vide évité automatiquement
+Le script vérifie désormais intelligemment s'il y a des changements stagés à commiter avant de tenter un commit, évitant ainsi l'erreur "Empty commit". Il analyse spécifiquement les fichiers avec un statut de staged (`A`, `M`, `R`, `C`, `D` suivis d'un espace) pour une détection plus précise.
 
 ## Personnalisation
 
