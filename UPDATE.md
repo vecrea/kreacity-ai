@@ -1,0 +1,17 @@
+# Instructions de mise à jour vers la version 0.2.0
+
+Date de publication: 2025-03-26
+
+## Comment mettre à jour
+
+1. Récupérez les derniers changements:
+   ```bash
+   git fetch origin
+   git checkout v0.2.0
+   ```
+
+## Principales nouveautés
+
+- Améliorations diverses et corrections de bugs
+
+Pour une liste complète des changements, consultez le [CHANGELOG.md](./CHANGELOG.md).
