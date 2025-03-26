@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0] - 2025-03-26
+
+### 🔄 Autres changements
+
+- Mise à jour de la version
+
+
+
 ## [0.4.0] - 2025-03-26
 
 ### 📚 Documentation
