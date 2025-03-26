@@ -473,8 +473,8 @@ function createGitTag(version, options = {}) {
     }
     
     // Vérifier s'il y a des fichiers modifiés non commités
-    const status = execSync('git status --porcelain').toString();
-    const hasUncommittedChanges = status.trim().length > 0;
+    let status = execSync('git status --porcelain').toString();
+    let hasUncommittedChanges = status.trim().length > 0;
     
     if (hasUncommittedChanges) {
       if (options.commitAll) {
@@ -514,29 +514,56 @@ function createGitTag(version, options = {}) {
     ].filter(file => fs.existsSync(file));
     
     if (filesToAdd.length === 0) {
-      console.error('❌ Aucun fichier à commiter pour la version.');
-      return;
-    }
-    
-    // Ajouter les fichiers modifiés par le script de versioning
-    execSync(`git add ${filesToAdd.join(' ')}`);
-    
-    // Ajouter aussi les dossiers de documentation si des fichiers y ont été créés
-    if (fs.existsSync(CONFIG.releaseNotesDir)) {
-      try {
-        execSync(`git add ${CONFIG.releaseNotesDir}`);
-      } catch (error) {
-        // Ignorer silencieusement si le dossier est vide ou déjà ajouté
+      console.log('ℹ️ Aucun fichier de version à commiter.');
+    } else {
+      // Ajouter les fichiers modifiés par le script de versioning
+      execSync(`git add ${filesToAdd.join(' ')}`);
+      
+      // Ajouter aussi les dossiers de documentation si des fichiers y ont été créés
+      if (fs.existsSync(CONFIG.releaseNotesDir)) {
+        try {
+          execSync(`git add ${CONFIG.releaseNotesDir}`);
+        } catch (error) {
+          // Ignorer silencieusement si le dossier est vide ou déjà ajouté
+        }
+      }
+      
+      // Vérifier à nouveau s'il y a des changements stagés prêts à être commités
+      status = execSync('git status --porcelain').toString();
+      
+      // Extraire seulement les fichiers stagés (ceux qui commencent par 'A', 'M', 'R', etc. suivis d'un espace)
+      const stagedChanges = status
+        .split('\n')
+        .filter(line => line.match(/^[AMRCD] /))
+        .join('\n');
+      
+      if (stagedChanges.length > 0) {
+        // Créer un commit de version seulement s'il y a des changements stagés
+        execSync(`git commit -m "chore: version ${version}" --no-verify`);
+        console.log(`✅ Changements de version commités`);
+      } else {
+        console.log(`ℹ️ Aucun nouveau changement à commiter pour la version`);
       }
     }
     
-    // Créer un commit de version
-    execSync(`git commit -m "chore: version ${version}" --no-verify`);
+    // Vérifier si le tag existe déjà
+    const existingTags = execSync(`git tag -l`).toString().split('\n');
+    const tagName = `v${version}`;
     
-    // Créer un tag pour la version
-    execSync(`git tag -a v${version} -m "Version ${version}"`);
-    
-    console.log(`✅ Tag Git v${version} créé`);
+    if (existingTags.includes(tagName)) {
+      console.log(`⚠️ Le tag ${tagName} existe déjà.`);
+      
+      if (options.force) {
+        // Supprimer et recréer le tag si --force est activé
+        execSync(`git tag -d ${tagName}`);
+        execSync(`git tag -a ${tagName} -m "Version ${version}"`);
+        console.log(`✅ Tag Git ${tagName} recréé avec --force`);
+      }
+    } else {
+      // Le tag n'existe pas, on peut le créer
+      execSync(`git tag -a ${tagName} -m "Version ${version}"`);
+      console.log(`✅ Tag Git ${tagName} créé`);
+    }
     
     if (options.push) {
       // Pousser les modifications et les tags
@@ -550,11 +577,11 @@ function createGitTag(version, options = {}) {
       } catch (error) {
         console.error("❌ Erreur lors de l'envoi des modifications:", error.message);
         console.log("Vous pouvez les envoyer manuellement avec:");
-        console.log(`git push origin HEAD && git push origin v${version}`);
+        console.log(`git push origin HEAD && git push origin ${tagName}`);
       }
     } else {
       console.log('\nUtilisez la commande suivante pour pousser les changements:');
-      console.log(`git push origin HEAD && git push origin v${version}`);
+      console.log(`git push origin HEAD && git push origin ${tagName}`);
     }
   } catch (error) {
     console.error('❌ Impossible de créer le tag Git:', error.message);
