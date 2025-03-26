@@ -4,7 +4,7 @@ const version = {
   lastUpdate: "2025-03-26",
   features: [
     "Added Ollama for local LLM and embedding processing",
-    "Standardized vector size to 1024 dimensions for universal compatibility",
+    "Standardized vector size to 4096 dimensions using bge-m3 model",
     "Added web UI dashboard for easy service navigation",
     "Fixed compatibility issues with ARM64 architecture (Apple Silicon)",
     "Improved documentation and integration guides",

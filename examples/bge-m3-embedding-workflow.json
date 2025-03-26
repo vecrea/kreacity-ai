@@ -1,0 +1,112 @@
+{
+  "name": "Document Embedding avec bge-m3",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $json.filePath }}"
+      },
+      "name": "Read Document",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "embeddings",
+        "model": "bge-m3",
+        "text": "={{ $json.content }}",
+        "options": {}
+      },
+      "name": "Ollama Embedding",
+      "type": "n8n-nodes-base.ollama",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://qdrant:6333/collections/documents/points",
+        "options": {
+          "method": "PUT",
+          "body": {
+            "points": [
+              {
+                "id": "={{ $json.id }}",
+                "vector": "={{ $json.embedding }}",
+                "payload": {
+                  "title": "={{ $json.title }}",
+                  "content": "={{ $json.content }}",
+                  "language": "={{ $json.language || 'fr' }}",
+                  "source": "={{ $json.source || 'import' }}",
+                  "type": "={{ $json.type || 'document' }}",
+                  "category": "={{ $json.category }}",
+                  "author": "={{ $json.author }}",
+                  "created_at": "={{ $json.created_at || $now }}",
+                  "tags": "={{ $json.tags || [] }}",
+                  "summary": "={{ $json.summary }}"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "name": "Qdrant Insert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Document": {
+      "main": [
+        [
+          {
+            "node": "Ollama Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Embedding": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
