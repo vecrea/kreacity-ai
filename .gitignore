@@ -1,1 +1,9 @@
 google-credentials.json
+docker-compose.yml
+n8n-data/config
+n8n-data/crash.journal
+n8n-data/database.sqlite
+n8n-data/n8nEventLog.log
+web-ui-data/index.html
+.env.tokens
+n8n-data/n8nEventLog-1.log

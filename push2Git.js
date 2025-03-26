@@ -452,11 +452,6 @@ function checkDependenciesToUpdate() {
  * @param {string} version Nouvelle version
  * @param {object} options Options de configuration
  */
-/**
- * Crée un tag Git pour la nouvelle version
- * @param {string} version Nouvelle version
- * @param {object} options Options de configuration
- */
 function createGitTag(version, options = {}) {
   try {
     // Vérifier si Git est disponible
@@ -478,8 +473,8 @@ function createGitTag(version, options = {}) {
     }
     
     // Vérifier s'il y a des fichiers modifiés non commités
-    let status = execSync('git status --porcelain').toString();
-    let hasUncommittedChanges = status.trim().length > 0;
+    const status = execSync('git status --porcelain').toString();
+    const hasUncommittedChanges = status.trim().length > 0;
     
     if (hasUncommittedChanges) {
       if (options.commitAll) {
@@ -535,27 +530,13 @@ function createGitTag(version, options = {}) {
       }
     }
     
-    // Vérifier à nouveau s'il y a des changements stagés prêts à être commités
-    status = execSync('git status --porcelain').toString();
-    hasUncommittedChanges = status.trim().length > 0;
+    // Créer un commit de version
+    execSync(`git commit -m "chore: version ${version}" --no-verify`);
     
-    if (hasUncommittedChanges) {
-      // Créer un commit de version seulement s'il y a des changements
-      execSync(`git commit -m "chore: version ${version}" --no-verify`);
-      console.log(`✅ Changements de version commités`);
-    } else {
-      console.log(`ℹ️ Aucun nouveau changement à commiter`);
-    }
+    // Créer un tag pour la version
+    execSync(`git tag -a v${version} -m "Version ${version}"`);
     
-    // Vérifier si le tag existe déjà
-    try {
-      execSync(`git tag -l v${version}`, { stdio: 'pipe' }).toString().trim();
-      console.log(`⚠️ Le tag v${version} existe déjà.`);
-    } catch (error) {
-      // Le tag n'existe pas, on peut le créer
-      execSync(`git tag -a v${version} -m "Version ${version}"`);
-      console.log(`✅ Tag Git v${version} créé`);
-    }
+    console.log(`✅ Tag Git v${version} créé`);
     
     if (options.push) {
       // Pousser les modifications et les tags

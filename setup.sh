@@ -97,6 +97,19 @@ cat > ./web-ui-data/index.html << 'HTML_EOF'
                 </div>
                 <div class="mt-4 text-sm text-blue-600">Port: 11434</div>
             </a>
+
+            <a href="http://localhost:4040" target="_blank" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-800">Webhook Forwarder</h2>
+                        <p class="text-gray-600 mt-2">Accès externe via ngrok (Dashboard)</p>
+                    </div>
+                    <div class="text-blue-500 text-2xl">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                </div>
+                <div class="mt-4 text-sm text-blue-600">Port: 4040</div>
+            </a>
         </div>
 
         <!-- Documentation Section -->
@@ -223,41 +236,37 @@ services:
 
   webhook-forwarder:
     container_name: webhook-forwarder
-    image: node:18-alpine
+    image: ngrok/ngrok:latest
     restart: unless-stopped
+    ports:
+      - "4040:4040"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_TOKEN}
     networks:
       - kreacity-network
-    command: sh -c "npm install -g localtunnel && lt --port 5678 --local-host n8n --subdomain kreacity-n8n"
+    command: ["http", "n8n:5678", "--log=stdout"]
 
 networks:
   kreacity-network:
     external: true
 COMPOSE_EOF
 
-# Création du fichier .env pour définir le nom du projet
+# Création du fichier .env pour définir le nom du projet et le token ngrok
+echo "Setting up environment variables..."
 echo "COMPOSE_PROJECT_NAME=kreacity" > .env
 
-# Création du fichier .env.tokens simplifié
-echo "Creating .env.tokens..."
-cat > .env.tokens << 'ENV_EOF'
-# Kreacity AI - Configuration minimale pour intégrations externes
-# Ne configurez ces valeurs que si vous avez besoin d'une intégration spécifique
+# Demander le token ngrok à l'utilisateur
+echo ""
+echo "Ngrok configuration"
+echo "-------------------"
+echo "Pour accéder à n8n depuis l'extérieur, un token ngrok est nécessaire."
+echo "Vous pouvez obtenir un token gratuit sur https://dashboard.ngrok.com/get-started/your-authtoken"
+echo ""
+read -p "Veuillez saisir votre token ngrok: " ngrok_token
+echo ""
 
-#-----------------------------------------
-# INTÉGRATIONS OPTIONNELLES
-#-----------------------------------------
-
-# Notion API - Pour l'intégration avec Notion (https://www.notion.so/my-integrations)
-# Décommentez et configurez uniquement si nécessaire
-# NOTION_API_KEY=your_notion_token_here
-
-# Google Drive API - Pour l'intégration avec Google Drive
-# Si nécessaire, placez votre fichier google-credentials.json dans le répertoire racine
-# et décommentez la ligne suivante
-# GOOGLE_APPLICATION_CREDENTIALS=./google-credentials.json
-
-# Note: Kreacity AI fonctionne parfaitement en mode local sans ces intégrations
-ENV_EOF
+# Ajouter le token à .env
+echo "NGROK_TOKEN=${ngrok_token}" >> .env
 
 # Création du fichier version.js
 echo "Creating version.js..."
@@ -265,13 +274,14 @@ cat > version.js << 'VERSION_EOF'
 // Kreacity AI Version Information
 const version = {
   version: "1.5.0",
-  lastUpdate: "2025-03-23",
+  lastUpdate: "2025-03-26",
   features: [
     "Added Ollama for local LLM and embedding processing",
     "Standardized vector size to 1024 dimensions for universal compatibility",
     "Added web UI dashboard for easy service navigation",
     "Fixed compatibility issues with ARM64 architecture (Apple Silicon)",
-    "Improved documentation and integration guides"
+    "Improved documentation and integration guides",
+    "Replaced localtunnel with ngrok for more reliable external access"
   ]
 };
 
@@ -352,38 +362,4 @@ CREATE TABLE IF NOT EXISTS documents (
 
 PSQL_EOF
 
-echo "PostgreSQL tables created successfully!"
-
-
-echo "Downloading embedding model for Ollama..."
-# Attendre que le service Ollama soit prêt
-echo "Waiting for Ollama to be ready..."
-until $(curl --output /dev/null --silent --head --fail http://localhost:11434/); do
-  printf '.'
-  sleep 5
-done
-
-# Télécharger le modèle d'embedding
-echo "Downloading mxbai-embed-large model..."
-curl -X POST http://localhost:11434/api/pull -d '{"name": "mxbai-embed-large"}' -s > /dev/null
-echo "Downloading nomic-embed-text model as backup..."
-curl -X POST http://localhost:11434/api/pull -d '{"name": "nomic-embed-text"}' -s > /dev/null
-
-
-echo "Embedding models downloaded successfully!"
-echo "Kreacity AI setup complete!"
-echo ""
-echo "Services available:"
-echo "- Web UI: http://localhost:8080"
-echo "- FloWise: http://localhost:3000"
-echo "- n8n: http://localhost:5678"
-echo "- Qdrant: http://localhost:6333"
-echo "- Ollama: http://localhost:11434"
-echo "- PostgreSQL: localhost:5555 (user: postgres, password: postgres)"
-echo ""
-echo "To check webhook forwarder status and URL:"
-echo "docker logs webhook-forwarder"
-echo ""
-echo "To configure integrations:"
-echo "1. Edit .env.tokens with your API credentials"
-echo "2. Place your google-credentials.json file in the root directory if needed"
+echo "
