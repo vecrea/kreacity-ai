@@ -1,3 +1,5 @@
+Voici la documentation mise à jour pour `push2Git.js` qui inclut des informations sur les problèmes d'authentification GitHub et les améliorations apportées à la gestion des commits et tags :
+
 # Gestionnaire de Versioning et Push Git pour Kreacity-AI
 
 ## Description
@@ -20,7 +22,7 @@
   - Identification des changements majeurs nécessitant une migration
 
 - 🔖 **Intégration Git**
-  - Création de tags Git pour chaque version
+  - Création intelligente de tags Git pour chaque version
   - Génération de commits pour les fichiers de versioning
   - Publication automatique sur le dépôt distant
 
@@ -39,6 +41,36 @@ npm link
 - Node.js (v12 ou supérieur)
 - Git
 - Package `semver` installé (`npm install semver`)
+- Accès avec droits d'écriture à votre dépôt GitHub
+
+## Configuration GitHub
+
+Avant d'utiliser les fonctionnalités de push, configurez correctement votre accès GitHub :
+
+1. **Authentification via token** (recommandé) :
+   - Créez un token d'accès personnel sur GitHub (Settings > Developer settings > Personal access tokens)
+   - Sélectionnez au minimum les permissions "repo"
+   - Configurez l'URL de votre dépôt avec le token :
+   ```bash
+   git remote set-url origin https://USERNAME:TOKEN@github.com/user/repo.git
+   ```
+
+2. **Authentification SSH** (alternative) :
+   ```bash
+   git remote set-url origin git@github.com:user/repo.git
+   ```
+
+3. **Stockage de credentials** (pour éviter de saisir le mot de passe à chaque fois) :
+   ```bash
+   # Sur macOS
+   git config --global credential.helper osxkeychain
+   
+   # Sur Windows
+   git config --global credential.helper wincred
+   
+   # Sur Linux
+   git config --global credential.helper store
+   ```
 
 ## Utilisation
 
@@ -99,34 +131,32 @@ Pour tirer pleinement parti de la génération automatique de changelog, utilise
 - `test:` - Modifications liées aux tests
 - `BREAKING CHANGE` - Changements incompatibles avec les versions précédentes
 
-## Intégration dans un workflow CI/CD
+## Comportement intelligent de Git
 
-```yaml
-# Exemple pour GitHub Actions
-name: Release Version
+Le script inclut plusieurs mécanismes pour éviter les erreurs Git courantes :
 
-on:
-  workflow_dispatch:
-    inputs:
-      version_type:
-        description: 'Type de version (major, minor, patch)'
-        required: true
-        default: 'patch'
+- Détection intelligente des changements non commités
+- Vérification pour éviter de créer des commits vides
+- Détection des tags existants pour éviter les conflits
+- Gestion élégante des erreurs d'authentification
 
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-      - run: npm ci
-      - name: Release new version
-        run: ./push2Git.js ${{ github.event.inputs.version_type }} --commit-all --push
-```
+## Résolution des problèmes courants
+
+### Erreur d'authentification (403)
+Si vous voyez une erreur comme `remote: Permission to user/repo.git denied` :
+- Vérifiez vos droits d'accès au dépôt
+- Configurez correctement votre token d'accès personnel (voir section Configuration GitHub)
+- Utilisez SSH au lieu de HTTPS si les problèmes persistent
+
+### Absence de commits dans le changelog
+- Assurez-vous que vos messages de commit suivent les conventions définies
+- Utilisez des préfixes standards comme `feat:`, `fix:`, etc.
+
+### Script de migration manquant
+Si des changements majeurs sont détectés mais qu'aucun script de migration n'est trouvé, créez manuellement le script dans `scripts/migrations/`.
+
+### Erreur "Empty commit"
+Cette erreur est maintenant automatiquement évitée par le script qui vérifie s'il y a des changements à commiter avant d'essayer de créer un commit.
 
 ## Personnalisation
 
@@ -142,19 +172,6 @@ const CONFIG = {
   migrationScriptsDir: 'scripts/migrations',
 };
 ```
-
-## Résolution des problèmes courants
-
-### Problèmes Git
-- Erreur "Not a git repository" : Exécutez d'abord `git init`
-- Problèmes de push : Vérifiez vos droits d'accès au dépôt distant
-
-### Changelogs incomplets
-- Assurez-vous que vos messages de commit suivent les conventions définies
-- Utilisez des préfixes standards comme `feat:`, `fix:`, etc.
-
-### Script de migration manquant
-Si des changements majeurs sont détectés mais qu'aucun script de migration n'est trouvé, le script vous avertira. Créez manuellement le script de migration dans `scripts/migrations/`.
 
 ---
 
