@@ -26,7 +26,7 @@ Kreacity AI est une plateforme locale d'intelligence artificielle tout-en-un, d�
 
 1. Clonez ce dépôt :
    ```bash
-   git clone https://github.com/votre-nom/kreacity-ai.git
+   git clone https://github.com/vecrea/kreacity-ai.git
    cd kreacity-ai
    ```
 
