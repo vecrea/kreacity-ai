@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Kreacity AI - Assistant d'installation/mise à jour v1.5.0"
+echo "Kreacity AI - Assistant d'installation/mise à jour v1.5.1"
 echo "--------------------------------------------------------"
 echo ""
 
@@ -61,13 +61,17 @@ else
 fi
 
 # Vérifier les services existants
-SERVICES=("n8n" "flowise" "web-ui" "qdrant" "db" "ollama" "webhook-forwarder")
+SERVICES=("n8n" "flowise" "web-ui" "qdrant" "db" "ollama" "webhook-forwarder" "adminer")
 RUNNING_SERVICES=()
 
 echo "Vérification des services existants..."
 for service in "${SERVICES[@]}"; do
-    if is_service_running "$service"; then
-        RUNNING_SERVICES+=("$service")
+    if is_service_running "$service" || is_service_running "kreacity-$service"; then
+        if is_service_running "$service"; then
+            RUNNING_SERVICES+=("$service")
+        else
+            RUNNING_SERVICES+=("kreacity-$service")
+        fi
         echo "✅ $service est déjà en cours d'exécution."
     else
         echo "❌ $service n'est pas en cours d'exécution."
@@ -95,9 +99,9 @@ if ask_yes_no "Mettre à jour le fichier docker-compose.yml ?" "Y"; then
     UPDATE_DOCKER_COMPOSE=true
 fi
 
-# Option pour configurer Qdrant avec bge-m3
+# Option pour configurer Qdrant avec taille de vecteurs 1024
 UPDATE_QDRANT=false
-if ! is_service_running "qdrant" || ask_yes_no "Reconfigurer Qdrant pour bge-m3 (4096D) ?" "Y"; then
+if ! is_service_running "qdrant" || ask_yes_no "Reconfigurer Qdrant pour bge-m3 (1024D) ?" "Y"; then
     UPDATE_QDRANT=true
 fi
 
@@ -137,13 +141,46 @@ if ask_yes_no "Démarrer/redémarrer les services après configuration ?" "Y"; t
     START_SERVICES=true
 fi
 
+# Option pour sauvegarder les workflows n8n avant la mise à jour
+BACKUP_N8N=false
+if ask_yes_no "Sauvegarder les workflows n8n avant mise à jour ?" "Y"; then
+    BACKUP_N8N=true
+fi
+
 echo ""
 echo "🔧 Début de la configuration selon vos choix..."
+
+# Sauvegarde des workflows n8n si demandé
+if [ "$BACKUP_N8N" = true ]; then
+    echo "Sauvegarde des workflows n8n..."
+    
+    # Détecter le conteneur n8n
+    N8N_CONTAINER=""
+    if is_service_running "kreacity-n8n"; then
+        N8N_CONTAINER="kreacity-n8n"
+    elif is_service_running "n8n"; then
+        N8N_CONTAINER="n8n"
+    fi
+    
+    if [ -n "$N8N_CONTAINER" ]; then
+        # Créer le répertoire de sauvegarde
+        mkdir -p ./backups/$(date +%Y-%m-%d)
+        
+        # Exporter les workflows
+        echo "Exportation des workflows depuis $N8N_CONTAINER..."
+        docker exec -i $N8N_CONTAINER n8n export:workflow --all --output=/tmp/n8n-workflows-backup.json
+        docker cp $N8N_CONTAINER:/tmp/n8n-workflows-backup.json ./backups/$(date +%Y-%m-%d)/n8n-workflows-backup.json
+        
+        echo "✅ Workflows n8n sauvegardés dans ./backups/$(date +%Y-%m-%d)"
+    else
+        echo "⚠️ Aucun conteneur n8n trouvé. Impossible de sauvegarder les workflows."
+    fi
+fi
 
 # Création des répertoires nécessaires
 if [ "$CREATE_DIRS" = true ]; then
     echo "Création des répertoires de données..."
-    mkdir -p ./n8n-data ./flowise-data ./qdrant-data ./postgres-data ./ollama-data ./web-ui-data
+    mkdir -p ./n8n-data ./flowise-data ./qdrant-data ./postgres-data ./ollama-data ./web-ui-data ./adminer-data
 fi
 
 # Configuration de l'interface Web
@@ -169,7 +206,7 @@ if [ "$SETUP_WEBUI" = true ]; then
                     <p class="text-blue-100">Plateforme d'Intelligence Artificielle</p>
                 </div>
                 <div>
-                    <span class="bg-blue-800 px-3 py-1 rounded-full text-sm">v1.5.0</span>
+                    <span class="bg-blue-800 px-3 py-1 rounded-full text-sm">v1.5.1</span>
                 </div>
             </div>
         </div>
@@ -243,6 +280,19 @@ if [ "$SETUP_WEBUI" = true ]; then
                 </div>
                 <div class="mt-4 text-sm text-blue-600">Port: 4040</div>
             </a>
+
+            <a href="http://localhost:8080" target="_blank" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-800">Adminer</h2>
+                        <p class="text-gray-600 mt-2">Interface de gestion pour PostgreSQL</p>
+                    </div>
+                    <div class="text-blue-500 text-2xl">
+                        <i class="fas fa-table"></i>
+                    </div>
+                </div>
+                <div class="mt-4 text-sm text-blue-600">Port: 8080</div>
+            </a>
         </div>
 
         <!-- Documentation Section -->
@@ -275,7 +325,7 @@ if [ "$SETUP_WEBUI" = true ]; then
                     <p class="text-gray-400">Plateforme locale d'intelligence artificielle</p>
                 </div>
                 <div>
-                    <p class="text-gray-400">Version 1.5.0</p>
+                    <p class="text-gray-400">Version 1.5.1</p>
                 </div>
             </div>
         </div>
@@ -393,6 +443,20 @@ services:
       - kreacity-network
     command: ["http", "kreacity-n8n:5678", "--log=stdout"]
 
+  adminer:
+    container_name: kreacity-adminer
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=kreacity-db
+      - ADMINER_DEFAULT_USER=postgres
+      - ADMINER_DEFAULT_PASSWORD=postgres
+      - ADMINER_DESIGN=flat
+    networks:
+      - kreacity-network
+
 networks:
   kreacity-network:
     external: true
@@ -423,12 +487,14 @@ echo "Mise à jour du fichier version.js..."
 cat > version.js << 'VERSION_EOF'
 // Kreacity AI Version Information
 const version = {
-  version: "1.5.0",
-  lastUpdate: "2025-03-26",
+  version: "1.5.1",
+  lastUpdate: "2025-03-29",
   features: [
     "Added Ollama for local LLM and embedding processing",
-    "Standardized vector size to 4096 dimensions using bge-m3 model",
+    "Standardized vector size to 1024 dimensions using bge-m3 model",
     "Added web UI dashboard for easy service navigation",
+    "Added Adminer for PostgreSQL database management",
+    "Improved workflow backup/restore functionality",
     "Fixed compatibility issues with ARM64 architecture (Apple Silicon)",
     "Improved documentation and integration guides",
     "Replaced localtunnel with ngrok for more reliable external access",
@@ -504,9 +570,9 @@ if [ "$START_SERVICES" = true ]; then
     sleep 5
 fi
 
-# Configuration de Qdrant pour bge-m3
-if [ "$UPDATE_QDRANT" = true ] && is_service_running "kreacity-qdrant" || is_service_running "qdrant"; then
-    echo "Configuration de Qdrant pour bge-m3 (vecteurs 4096D)..."
+# Configuration de Qdrant pour bge-m3 avec vecteurs 1024D
+if [ "$UPDATE_QDRANT" = true ] && (is_service_running "kreacity-qdrant" || is_service_running "qdrant"); then
+    echo "Configuration de Qdrant pour bge-m3 (vecteurs 1024D)..."
     
     # Attendre que Qdrant soit prêt
     echo "Attente du démarrage de Qdrant..."
@@ -545,13 +611,13 @@ if [ "$UPDATE_QDRANT" = true ] && is_service_running "kreacity-qdrant" || is_ser
         fi
         
         if [ "$COLLECTION_EXISTS" = false ]; then
-            # Créer une nouvelle collection avec configuration optimisée
-            echo "Création de la collection avec configuration optimisée pour bge-m3..."
+            # Créer une nouvelle collection avec configuration optimisée pour 1024 dimensions
+            echo "Création de la collection avec configuration optimisée pour bge-m3 (1024D)..."
             curl -X PUT 'http://localhost:6333/collections/documents' \
             -H 'Content-Type: application/json' \
             -d '{
                 "vectors": {
-                    "size": 4096,
+                    "size": 1024,
                     "distance": "Cosine"
                 },
                 "optimizers_config": {
@@ -597,7 +663,7 @@ if [ "$UPDATE_QDRANT" = true ] && is_service_running "kreacity-qdrant" || is_ser
                 -H 'Content-Type: application/json' \
                 -d '{
                     "vectors": {
-                        "size": 4096,
+                        "size": 1024,
                         "distance": "Cosine"
                     }
                 }'
@@ -641,13 +707,6 @@ if [ "$UPDATE_POSTGRES" = true ] && (is_service_running "kreacity-db" || is_serv
     if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
         echo "⚠️ PostgreSQL n'a pas démarré à temps."
     else
-        # Vérifier si la table documents existe déjà
-        TABLE_EXISTS=false
-        if docker exec -i $PG_CONTAINER psql -U postgres -d postgres -c "\dt documents" 2>/dev/null | grep -q documents; then
-            TABLE_EXISTS=true
-            echo "La table 'documents' existe déjà."
-        fi
-        
         # Création ou mise à jour de la table documents
         echo "Création/mise à jour des tables de métadonnées..."
         docker exec -i $PG_CONTAINER psql -U postgres -d postgres << 'PSQL_EOF'
@@ -656,7 +715,8 @@ CREATE TABLE IF NOT EXISTS documents (
   id SERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   content TEXT,
-  vector_id TEXT UNIQUE,  -- ID dans Qdrant
+  source_id TEXT UNIQUE,  -- ID unique du document source (par ex. ID Notion)
+  vector_id TEXT,  -- ID dans Qdrant
   language TEXT,
   source TEXT,
   category TEXT,
@@ -671,13 +731,27 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Index pour accélérer les recherches (seront créés s'ils n'existent pas)
+-- Table pour les chunks de documents
+CREATE TABLE IF NOT EXISTS document_chunks (
+  id SERIAL PRIMARY KEY,
+  document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+  chunk_id TEXT,
+  chunk_index INTEGER,
+  vector_id TEXT,
+  content_preview TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(document_id, chunk_index)
+);
+
+-- Index pour accélérer les recherches
 CREATE INDEX IF NOT EXISTS idx_documents_language ON documents(language);
 CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
+CREATE INDEX IF NOT EXISTS idx_documents_source_id ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_documents_vector_id ON documents(vector_id);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source);
-CREATE INDEX IF NOT EXISTS idx_documents_author ON documents(author);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_id ON document_chunks(vector_id);
 
 PSQL_EOF
 
@@ -854,36 +928,61 @@ if [ "$CREATE_EXAMPLE" = true ]; then
     },
     {
       "parameters": {
+        "jsCode": "// Générer un UUID valide\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\n// Extraire l'embedding et préparer les données pour Qdrant\nconst data = $json;\nconst embedding = data.embedding;\nconst uuid = uuidv4();\n\n// Vérifier la taille du vecteur d'embedding\nconsole.log(\"Taille du vecteur d'embedding:\", embedding.length);\n\n// Préparer les données pour Qdrant\nconst qdrantData = {\n  points: [{\n    id: uuid,  // UUID au format attendu par Qdrant\n    vector: embedding,\n    payload: {\n      content: data.content,\n      title: data.title || 'Sans titre',\n      language: data.language || 'fr',\n      source: data.source || 'import',\n      category: data.category || 'document',\n      source_id: data.source_id || `doc-${Date.now()}`,\n      chunk_index: data.chunkIndex || 0,\n      total_chunks: data.totalChunks || 1,\n      document_id: data.documentId || `doc-${Date.now()}`\n    }\n  }]\n};\n\nreturn {\n  ...data,\n  vectorId: uuid,\n  source_id: data.source_id || `doc-${Date.now()}`,\n  qdrantData: qdrantData\n};"
+      },
+      "name": "Préparer données Qdrant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "url": "http://kreacity-qdrant:6333/collections/documents/points",
         "options": {
           "method": "PUT",
           "body": {
             "points": [
               {
-                "id": "={{ $json.id }}",
+                "id": "={{ $json.vectorId }}",
                 "vector": "={{ $json.embedding }}",
                 "payload": {
-                  "title": "={{ $json.title }}",
+                  "title": "={{ $json.title || 'Sans titre' }}",
                   "content": "={{ $json.content }}",
                   "language": "={{ $json.language || 'fr' }}",
                   "source": "={{ $json.source || 'import' }}",
                   "type": "={{ $json.type || 'document' }}",
-                  "category": "={{ $json.category }}",
+                  "category": "={{ $json.category || 'general' }}",
                   "author": "={{ $json.author }}",
-                  "created_at": "={{ $json.created_at || $now }}",
-                  "tags": "={{ $json.tags || [] }}",
-                  "summary": "={{ $json.summary }}"
+                  "source_id": "={{ $json.source_id }}",
+                  "created_at": "={{ $json.created_at || $now }}"
                 }
               }
             ]
           }
         }
       },
-      "name": "Qdrant Insert",
+      "name": "Insérer dans Qdrant",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1050,
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO documents \n(title, content, source_id, language, source, category, author, url, vector_id, tags, created_at, updated_at)\nVALUES (\n  '{{ $json.title || \"Sans titre\" }}', \n  '{{ $json.content.substring(0, 1000) + \"...\" }}', \n  '{{ $json.source_id }}',\n  '{{ $json.language || \"fr\" }}',\n  '{{ $json.source || \"import\" }}',\n  '{{ $json.category || \"general\" }}',\n  '{{ $json.author || \"\" }}',\n  '{{ $json.url || \"\" }}',\n  '{{ $json.vectorId }}',\n  ARRAY[{{ ($json.tags && $json.tags.length > 0) ? \"'\" + $json.tags.join(\"','\") + \"'\" : \"\" }}]::text[],\n  NOW(),\n  NOW()\n)\nON CONFLICT (source_id) \nDO UPDATE SET\n  title = EXCLUDED.title,\n  content = EXCLUDED.content,\n  language = EXCLUDED.language,\n  category = EXCLUDED.category,\n  vector_id = EXCLUDED.vector_id,\n  updated_at = NOW()\nRETURNING id, source_id, vector_id;",
+        "options": {}
+      },
+      "name": "Enregistrer dans PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1450,
         300
       ]
     }
@@ -915,7 +1014,29 @@ if [ "$CREATE_EXAMPLE" = true ]; then
       "main": [
         [
           {
-            "node": "Qdrant Insert",
+            "node": "Préparer données Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer données Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Insérer dans Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insérer dans Qdrant": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer dans PostgreSQL",
             "type": "main",
             "index": 0
           }
@@ -949,7 +1070,9 @@ Le fichier `bge-m3-embedding-workflow.json` est un workflow n8n que vous pouvez 
 - Nœud "Start" : Point de départ du workflow
 - Nœud "Read Document" : Lecture du fichier (à adapter selon votre source)
 - Nœud "Ollama Embedding" : Génération de l'embedding avec bge-m3
-- Nœud "Qdrant Insert" : Insertion dans Qdrant avec métadonnées
+- Nœud "Préparer données Qdrant" : Traitement des données et création d'un UUID valide
+- Nœud "Insérer dans Qdrant" : Insertion dans Qdrant avec métadonnées
+- Nœud "Enregistrer dans PostgreSQL" : Enregistre les métadonnées du document dans PostgreSQL
 
 ### Métadonnées flexibles :
 
@@ -957,6 +1080,8 @@ Les métadonnées sont optionnelles. Le workflow utilise des valeurs par défaut
 - `language` : 'fr' par défaut
 - `source` : 'import' par défaut
 - `type` : 'document' par défaut
+- `category` : 'general' par défaut
+- `source_id` : généré automatiquement si non fourni
 - `created_at` : date actuelle par défaut
 - `tags` : tableau vide par défaut
 
@@ -966,6 +1091,7 @@ Les métadonnées sont optionnelles. Le workflow utilise des valeurs par défaut
 - **Langues** : Spécifiez toujours la langue pour améliorer les résultats de recherche
 - **Métadonnées** : Plus vos métadonnées sont riches, plus vos recherches seront précises
 - **Catégorisation** : Utilisez des catégories et des tags cohérents pour faciliter le filtrage
+- **Identifiants source** : Utilisez toujours un `source_id` unique et stable pour chaque document source
 
 ## Recherche dans Qdrant
 
@@ -1003,10 +1129,11 @@ if [ "$CREATE_DOCUMENT_EXAMPLE" = true ]; then
 
 # Définir l'ID unique du document (utilisez UUID ou un identifiant de votre choix)
 DOC_ID="doc-$(date +%s)"
+SOURCE_ID="source-$(date +%s)"
 
 # Définir le contenu du document
 TITLE="Exemple de document pour Kreacity AI"
-CONTENT="Ceci est un exemple de document qui montre comment insérer des données dans Qdrant avec des métadonnées flexibles. Les métadonnées peuvent être complètes ou partielles selon vos besoins. Le modèle bge-m3 génère des embeddings de dimension 4096 qui capturent les nuances sémantiques du texte en français et en anglais."
+CONTENT="Ceci est un exemple de document qui montre comment insérer des données dans Qdrant avec des métadonnées flexibles. Les métadonnées peuvent être complètes ou partielles selon vos besoins. Le modèle bge-m3 génère des embeddings de dimension 1024 qui capturent les nuances sémantiques du texte en français et en anglais."
 
 # Générer l'embedding avec Ollama
 echo "Génération de l'embedding avec bge-m3..."
@@ -1021,17 +1148,21 @@ if [ -z "$EMBEDDING" ]; then
     exit 1
 fi
 
+# Générer un UUID valide pour Qdrant
+UUID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+echo "UUID généré pour Qdrant: $UUID"
+
 # Déterminer l'URL Qdrant selon le nom du conteneur (kreacity-qdrant ou qdrant)
 QDRANT_HOST="localhost"
 
-# Insérer le document dans Qdrant avec métadonnées flexibles
+# Insérer le document dans Qdrant avec ID au format UUID
 echo "Insertion du document dans Qdrant..."
 curl -X PUT http://${QDRANT_HOST}:6333/collections/documents/points \
   -H 'Content-Type: application/json' \
   -d "{
     \"points\": [
       {
-        \"id\": \"$DOC_ID\",
+        \"id\": \"$UUID\",
         \"vector\": $EMBEDDING,
         \"payload\": {
           \"title\": \"$TITLE\",
@@ -1041,6 +1172,7 @@ curl -X PUT http://${QDRANT_HOST}:6333/collections/documents/points \
           \"type\": \"document\",
           \"category\": \"exemple\",
           \"author\": \"Kreacity AI\",
+          \"source_id\": \"$SOURCE_ID\",
           \"created_at\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
           \"tags\": [\"exemple\", \"tutoriel\", \"metadata\"],
           \"rating\": 5
@@ -1062,16 +1194,17 @@ if docker ps --format '{{.Names}}' | grep -q "^$PG_CONTAINER$"; then
     echo "Insertion des métadonnées dans PostgreSQL..."
     docker exec -i $PG_CONTAINER psql -U postgres -d postgres << PSQL_EOF
 INSERT INTO documents 
-(title, content, vector_id, language, source, category, author, tags, created_at)
+(title, content, source_id, vector_id, language, source, category, author, tags, created_at)
 VALUES 
-('$TITLE', '$CONTENT', '$DOC_ID', 'fr', 'exemple_script', 'exemple', 'Kreacity AI', ARRAY['exemple', 'tutoriel', 'metadata'], '$(date -u +"%Y-%m-%d %H:%M:%S")'::timestamptz);
+('$TITLE', '$CONTENT', '$SOURCE_ID', '$UUID', 'fr', 'exemple_script', 'exemple', 'Kreacity AI', ARRAY['exemple', 'tutoriel', 'metadata'], '$(date -u +"%Y-%m-%d %H:%M:%S")'::timestamptz);
 PSQL_EOF
 else
     echo "Conteneur PostgreSQL non trouvé. Métadonnées non insérées dans PostgreSQL."
 fi
 
 echo "✅ Document inséré avec succès dans Qdrant!"
-echo "ID du document: $DOC_ID"
+echo "ID du document: $SOURCE_ID"
+echo "ID du vecteur: $UUID"
 echo ""
 echo "Pour rechercher des documents similaires, vous pouvez utiliser:"
 echo "curl -X POST http://localhost:6333/collections/documents/points/search -H 'Content-Type: application/json' -d '{\"vector\": [...votre vecteur de recherche...], \"limit\": 5}'"
@@ -1091,8 +1224,7 @@ echo ""
 
 # Vérifier les services en cours d'exécution après configuration
 echo "Services actuels:"
-for service in $(docker ps --format '{{.Names}}' | grep -E '^(kreacity-|)n8n$|^(kreacity-|)flowise$|^(kreacity-|)web-ui$|^(kreacity-|)qdrant$|^(kreacity-|)db$|^(kreacity-|)ollama$|^(kreacity-|)webhook-forwarder3
-            echo "Téléchargement du modèle bge-m); do
+for service in $(docker ps --format '{{.Names}}' | grep -E '^(kreacity-|)n8n$|^(kreacity-|)flowise$|^(kreacity-|)web-ui$|^(kreacity-|)qdrant$|^(kreacity-|)db$|^(kreacity-|)ollama$|^(kreacity-|)webhook-forwarder$|^(kreacity-|)adminer); do
     echo "- $service: ✅ En cours d'exécution"
 done
 
@@ -1100,13 +1232,13 @@ echo ""
 
 # Vérifier si Qdrant est configuré
 if curl --output /dev/null --silent --fail http://localhost:6333/collections/documents; then
-    echo "Configuration Qdrant: Vecteurs de dimension 4096 pour bge-m3"
+    echo "Configuration Qdrant: Vecteurs de dimension 1024 pour bge-m3"
     echo "Métadonnées indexées: title, source, type, category, language, author, created_at, updated_at, tags, keywords, rating"
 fi
 
 # Vérifier si Ollama a le modèle bge-m3
 if curl -s http://localhost:11434/api/tags | grep -q "bge-m3"; then
-    echo "Modèle d'embedding: bge-m3 (dimension: 4096, tokens max: 8194)"
+    echo "Modèle d'embedding: bge-m3 (dimension: 1024, tokens max: 8194)"
 fi
 
 # Vérifier l'URL ngrok
@@ -1123,6 +1255,10 @@ if [ "$CREATE_DOCUMENT_EXAMPLE" = true ]; then
     echo "Script d'insertion d'exemple: ./examples/insert-document.sh"
 fi
 
+if [ "$BACKUP_N8N" = true ]; then
+    echo "Sauvegarde des workflows n8n: ./backups/$(date +%Y-%m-%d)/n8n-workflows-backup.json"
+fi
+
 echo ""
 echo "Accès aux services:"
 echo "- Web UI: http://localhost:8080"
@@ -1131,7 +1267,11 @@ echo "- n8n: http://localhost:5678"
 echo "- Qdrant: http://localhost:6333"
 echo "- Ollama: http://localhost:11434"
 echo "- PostgreSQL: localhost:5555 (user: postgres, password: postgres)"
+echo "- Adminer: http://localhost:8090 (serveur: kreacity-db, user: postgres, password: postgres)"
 echo "- Ngrok Dashboard: http://localhost:4040"
 echo ""
-echo "Pour plus d'informations, consultez la documentation dans le dossier docs/"3
-            echo "Téléchargement du modèle bge-m
+echo "Pour plus d'informations, consultez la documentation dans le dossier docs/"
+echo ""
+echo "Pour restaurer une sauvegarde de workflows n8n, utilisez:"
+echo "docker exec -i kreacity-n8n n8n import:workflow --input=/tmp/backup.json"
+echo "(Après avoir copié le fichier dans le conteneur: docker cp ./backups/[date]/n8n-workflows-backup.json kreacity-n8n:/tmp/backup.json)"
